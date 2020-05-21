@@ -1,4 +1,81 @@
 # TRUE Global Environment
+#' modified function and pass ref.list arg to CreateSinglerObject
+#' @param N sub sample size
+CreateBigSingleRObject.1 <- function (counts, annot = NULL, project.name, xy = NULL, clusters = NULL, 
+                                    N = 10000, min.genes = 200, technology = "10X", species = "Human", 
+                                    citation = "", ref.list = list(), normalize.gene.length = F, 
+                                    variable.genes = "de", fine.tune = T, reduce.file.size = T, 
+                                    do.signatures = F, do.main.types = T, temp.dir = getwd(), 
+                                    numCores = SingleR.numCores) 
+{
+    n = ncol(counts)
+    s = seq(1, n, by = N)
+    dir.create(paste0(temp.dir, "/singler.temp/"), showWarnings = FALSE)
+    for (i in s) {
+        print(i)
+        A = seq(i, min(i + N - 1, n))
+        singler = CreateSinglerObject(counts[, A], annot = annot[A], 
+                                      project.name = project.name, min.genes = min.genes, 
+                                      ref.list =ref.list, normalize.gene.length = normalize.gene.length,
+                                      technology = technology, species = species, citation = citation,
+                                      variable.genes =variable.genes, fine.tune = fine.tune, 
+                                      do.signatures = do.signatures, do.main.types = do.main.types,
+                                      clusters = NULL, numCores = numCores)
+        save(singler, file = paste0(temp.dir, "/singler.temp/", 
+                                    project.name, ".", i, ".RData"))
+    }
+    singler.objects.file <- list.files(paste0(temp.dir, "/singler.temp/"), 
+                                       pattern = "RData", full.names = T)
+    singler.objects = list()
+    for (i in 1:length(singler.objects.file)) {
+        load(singler.objects.file[[i]])
+        singler.objects[[i]] = singler
+    }
+    singler = SingleR.Combine(singler.objects, order = NULL, 
+                              clusters = clusters, xy = xy)
+    singler
+}
+
+
+# TRUE Global Environment
+#' modified SCINA function to split big data into smaller size
+#' @param N split into smaller sample subsets. Suggest > 10000 to avoid null signature
+
+BigSCINA <- function (exp, signatures, N = 10000, max_iter = 100, convergence_n = 10, 
+                      convergence_rate = 0.99, sensitivity_cutoff = 1, rm_overlap = 1, 
+                      allow_unknown = 1, log_file = "SCINA.log") 
+{
+    n = ncol(exp)
+    N1 = N + round((n %% N)/(n %/% N))+1 # increase the N by add back rest of remainder plus 1
+    s = seq(1, n, by = N1)
+    scina_list <- list()
+    for (i in seq_along(s)) {
+        A = seq(s[i], min(s[i] + N1 - 1, n))
+        print(paste(head(A,1),"<->",tail(A,1)))
+        print(length(A))
+        print(system.time(scina_list[[i]] <- SCINA(exp = exp[, A], signatures, max_iter = max_iter, convergence_n = convergence_n, 
+                          convergence_rate = convergence_rate, sensitivity_cutoff = sensitivity_cutoff,
+                          rm_overlap = rm_overlap, allow_unknown = allow_unknown, 
+                          log_file = log_file)))
+        Progress(i, length(s))
+    }
+    scina <- list(cell_labels = NULL, 
+                  probabilities = matrix(1:length(signatures),
+                                         dimnames = list(names(signatures),
+                                                         "gene")))
+    message("merging scina results")
+    for(m in seq_along(scina_list)){
+        scina$cell_labels = c(scina$cell_labels, scina_list[[m]]$cell_labels)
+        scina$probabilities = merge(scina$probabilities, 
+                                    scina_list[[m]]$probabilities,
+                                    by = "row.names", all = TRUE)
+        rownames(scina$probabilities) = scina$probabilities$Row.names
+        scina$probabilities = scina$probabilities[,-grep("Row.names|gene",colnames(scina$probabilities))]
+        Progress(m, length(s))
+    }
+    return(scina)
+}
+
 
 CreatGeneSetsFromSingleR <- function(object = object, cell.type = "B_cell",main.type = FALSE,
                                      species = "Human"){
@@ -107,10 +184,10 @@ FineTune <- function(x, main.type = FALSE){
                 x = gsub("CD4\\+_T_cells","T_cells:CD4\\+",x)
                 x = gsub("CD8\\+_T-cells","T_cells:CD8\\+",x)
                 x = gsub("CD8\\+_T_cells","T_cells:CD8\\+",x)
-                x = gsub("CD4\\+_Tcm","T_cells:CD4\\+_central_memory",x)
-                x = gsub("CD4\\+_Tem","T_cells:CD4\\+_effector_memory",x)
-                x = gsub("CD8\\+_Tcm","T_cells:CD8\\+_Central_memory",x)
-                x = gsub("CD8\\+_Tem","T_cells:CD8\\+_effector_memory",x)
+                x = gsub("CD4\\+_Tcm","T_cells:CD4\\+",x)
+                x = gsub("CD4\\+_Tem","T_cells:CD4\\+",x)
+                x = gsub("CD8\\+_Tcm","T_cells:CD8\\+",x)
+                x = gsub("CD8\\+_Tem","T_cells:CD8\\+",x)
                 x = gsub("Class-switched_memory_B_cells","B_cells:Class-switched_memory",x)
                 x = gsub("FCGR3A\\+_Monocytes","Monocytes:FCGR3A\\+",x)
                 x = gsub("Macrophages_M1","Macrophages:M1",x)
@@ -126,73 +203,138 @@ FineTune <- function(x, main.type = FALSE){
 }
 
 
+#=====Clean memory======================
+GC <- function()
+{
+    while (gc()[2, 4] != gc()[2, 4] | gc()[1, 4] != gc()[1,
+                                                         4]) {
+    }
+}
+
+
+#' search cell type markers database. 
+#' Provide gene names and return the most likely cell types
+#' @param df data.frame cell type markers database
+#' @param marker gene name
+#' @export result_df the most likely cell types and rank
 SearchMarker <- function(df, marker){
-        result = apply(df, 2, function(x) which(grepl(marker, x)))
+        result = apply(df, 2, function(x) which(grepl(marker, x))[1])
         result_df = data.frame(sort(unlist(result)))
         colnames(result_df) = marker
         return(result_df)
 }
 
-
+#' search cell type markers database. 
+#' Provide gene names and return the most likely cell types
+#' @param df data.frame cell type markers database
+#' @param markers gene names
+#' @export result_df the most likely cell types and rank
+#' @example 
+# markers_All <- read.csv("output/20190311/markers.All.csv")
+# neutril <- FilterGenes(object, markers_All[markers_All$cluster == 4,"gene"][1:20])
+# neutril_df <- SearchAllMarkers(Hpca_Blueprint_encode_main,neutril)
+# neutril_df["Neutrophils",]
 SearchAllMarkers <- function(df, markers){
         results <- lapply(markers,function(x) SearchMarker(df,x))
         names(results) <- markers
-        temp_df = results[[1]]
-        for(i in 2:length(results)) {
-                temp_df = merge(temp_df,results[[i]], by="row.names",all=TRUE)
-                rownames(temp_df) = temp_df$Row.names
-                temp_df = temp_df[,-1]
-        }
-        temp_df = removeNA(temp_df)
-        return(temp_df)
+        
+        # remove empty elements
+        idx <- lapply(results, nrow) %>% unlist
+        non_empty <- which(idx>0)
+    
+        # add row.names as the new column
+        results_list <- lapply(results[non_empty], function(x) {
+                x$cell_type = rownames(x)
+                x
+        })
+        merged_results <- Reduce(function(x, y) merge(x, y, all=TRUE,by="cell_type"),
+                                 results_list)
+        rownames(merged_results) = merged_results$cell_type
+        merged_results = merged_results[,-1]
+        merged_results = removeNA(merged_results)
+        return(merged_results)
 }
 
-
-SingleR.Subset.1 <- function (singler, subsetdata)
-{
-    s = singler
-    if (!is.null(s$seurat)) {
-        s$seurat = SubsetData(s$seurat, colnames(s$seurat@data)[subsetdata])
-        subsetdata = unlist(lapply(s$seurat@cell.names, FUN = function(x) which(singler$singler[[1]]$SingleR.single$cell.names ==
-        x)))
+#' Plot a heatmap of the scores for all the single cells
+#'
+#' @param SingleR the output from the SingleR function
+#' @param cells.use single cells to present, if NULL all single cells presented
+#' @param types.use cell types to present, if NULL all cell types presented
+#' @param clusters a clustering to present as annotation in the heatmap
+#' @param top.n number of cell types to presents. Default is 40. This can have an effect on the clustering which is performed only on the cell types presented.
+#' @param normalize if TRUE scores are normalized to a 0-1 scale.
+#' @param order.by.clusters if TRUE columns are ordered by the input clusters, and are not clustered again
+#' @param cells_order an input order for the column
+#' @param silent if TRUE do not draw the plot  
+SingleR.DrawHeatmap = function(SingleR,cells.use = NULL, types.use = NULL,
+                               clusters=NULL,top.n=40,normalize=T,
+                               order.by.clusters=F,cells_order=NULL,silent=F,
+                               fontsize_row=9,...) {
+    scores = SingleR$scores
+    if (!is.null(cells.use)) {
+        scores = scores[cells.use,]
     }
-    for (i in 1:length(s$singler)) {
-        s$singler[[i]]$SingleR.single$cell.names = s$singler[[i]]$SingleR.single$cell.names[subsetdata]
-        s$singler[[i]]$SingleR.clusters$cell.names = s$singler[[i]]$SingleR.clusters$cell.names[subsetdata]
-        s$singler[[i]]$SingleR.single$scores = s$singler[[i]]$SingleR.single$scores[subsetdata,
-        ]
-        s$singler[[i]]$SingleR.single$labels = as.matrix(s$singler[[i]]$SingleR.single$labels[subsetdata,
-        ])
+    if (!is.null(types.use)) {
+        scores = scores[,types.use]
+    }
+    
+    m = apply(t(scale(t(scores))),2,max)
+    
+    thres = sort(m,decreasing=TRUE)[min(top.n,length(m))]
+    
+    data = as.matrix(scores)
+    
+    if (normalize==T) {
+        mmax = rowMaxs(data)
+        mmin = rowMins(data)
+        data = (data-mmin)/(mmax-mmin)
+        data = data^3
+    }
+    data = data[,m>(thres-1e-6)]
+    
+    
+    data = t(data)
+    
+    if (!is.null(clusters)) {
+        clusters = as.data.frame(clusters)
+        colnames(clusters) = 'Clusters'
+        rownames(clusters) = colnames(data)
         
-        if(length(s$singler[[i]]$SingleR.single$labels1)>1) {
-            s$singler[[i]]$SingleR.single$labels1 = as.matrix(s$singler[[i]]$SingleR.single$labels1[subsetdata,
-            ])}
-        s$singler[[i]]$SingleR.single$clusters$cl = s$singler[[i]]$SingleR.single$clusters$cl[subsetdata]
-        if (!is.null(s$singler[[i]]$SingleR.single.main)) {
-            s$singler[[i]]$SingleR.single.main$cell.names = s$singler[[i]]$SingleR.single.main$cell.names[subsetdata]
-            s$singler[[i]]$SingleR.clusters.main$cell.names = s$singler[[i]]$SingleR.clusters.main$cell.names[subsetdata]
-            s$singler[[i]]$SingleR.single.main$scores = s$singler[[i]]$SingleR.single.main$scores[subsetdata,
-            ]
-            s$singler[[i]]$SingleR.single.main$labels = as.matrix(s$singler[[i]]$SingleR.single.main$labels[subsetdata,
-            ])
-            if(length(s$singler[[i]]$SingleR.single$labels1)>1) {
-                s$singler[[i]]$SingleR.single.main$labels1 = as.matrix(s$singler[[i]]$SingleR.single.main$labels1[subsetdata,
-                ])}
-            s$singler[[i]]$SingleR.single.main$clusters$cl = s$singler[[i]]$SingleR.single.main$clusters$cl[subsetdata]
+    }
+    additional_params = list(...)
+    if (is.null(additional_params$annotation_colors)) {
+        annotation_colors = NA
+    } else {
+        annotation_colors = additional_params$annotation_colors
+    }
+    clustering_method = 'ward.D2'
+    if (order.by.clusters==T) {
+        data = data[,order(clusters$Clusters)]
+        clusters = clusters[order(clusters$Clusters),,drop=F]
+        pheatmap(data,border_color=NA,show_colnames=FALSE,
+                 clustering_method=clustering_method,fontsize_row=fontsize_row,
+                 annotation_col = clusters,cluster_cols = F,silent=silent, 
+                 annotation_colors=annotation_colors)
+    } else if (!is.null(cells_order)) {
+        data = data[,cells_order]
+        clusters = clusters[cells_order,,drop=F]
+        pheatmap(data,border_color=NA,show_colnames=FALSE,
+                 clustering_method=clustering_method,fontsize_row=fontsize_row,
+                 annotation_col = clusters,cluster_cols = F,silent=silent, 
+                 annotation_colors=annotation_colors)
+    } else {
+        if (!is.null(clusters)) {
+            pheatmap(data,border_color=NA,show_colnames=FALSE,
+                     clustering_method=clustering_method,fontsize_row=fontsize_row,
+                     annotation_col = clusters,silent=silent, 
+                     annotation_colors=annotation_colors)
+        } else {
+            pheatmap(data[,sample(ncol(data))],border_color=NA,show_colnames=FALSE,
+                     clustering_method=clustering_method,fontsize_row=fontsize_row,
+                     silent=silent, annotation_colors=annotation_colors)
+            
         }
     }
-    if (!is.null(s[["signatures"]])) {
-        s$signatures = s$signatures[subsetdata, ]
-    }
-    if (!is.null(s[["other"]])) {
-        s$other = s$other[subsetdata]
-    }
-    if (!is.null(s$meta.data)) {
-        s$meta.data$orig.ident = factor(as.character(s$meta.data$orig.ident[subsetdata]))
-        s$meta.data$xy = s$meta.data$xy[subsetdata, ]
-        s$meta.data$clusters = factor(as.character(s$meta.data$clusters[subsetdata]))
-    }
-    s
 }
 
 
@@ -293,6 +435,52 @@ SingleR.PlotTsne.1 <- function (SingleR, xy, labels = SingleR$labels, score.thre
     p = p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
     panel.background = element_blank(), axis.line = element_line(colour = "black"))
     return(p)
+}
+
+
+#' Plot a feature on the t-SNE plot, modified for Seurat 3
+#'
+#' @param SingleR the output from the SingleR function
+#' @param seurat the seurat object version 3
+#' @param plot.feature the feature to plot - 'MaxScore' for coloring according to the top score per cell, 'nGene' for number of non-zero genes, 'nUMI' for number of UMIs, or a gene name.
+#' @param dot.size size of the dot in the plot.
+#'
+#' @return ggplot2 object
+SingleR.PlotFeature = function(SingleR, seurat, plot.feature='nCount_RNA', 
+                               dot.size=1, reduction = "tsne", title=NULL) {
+    if (!requireNamespace("Seurat", quietly = TRUE)) {
+        stop("Seurat needed for this function to work. Please install it.",
+             call. = FALSE)
+    }
+    if (packageVersion('Seurat')>=3) {
+        xy = seurat@reductions[[reduction]]@cell.embeddings
+    } else {
+        xy = seurat@dr[reduction]@cell.embeddings
+    }
+    df = as.data.frame(xy[SingleR$cell.names,])
+    if (length(plot.feature)==nrow(df)) {
+        df$Feature=plot.feature
+        tit = 'Feature'
+    }   else if (plot.feature=='MaxScore') {
+        df$Feature = apply(SingleR$scores,1,max) 
+        tit = 'Max Score'
+    }   else if (plot.feature %in% colnames(object@meta.data)) {
+        df$Feature = seurat@meta.data[[plot.feature]]
+        tit = plot.feature
+    }   else {
+        DefaultAssay(object)
+        df$Feature = seurat@assays[[DefaultAssay(object)]]@data[plot.feature,]
+        tit = plot.feature
+    }
+    if (is.null(title)) {
+        title = tit
+    }
+    dims <- paste0(Key(object = object[[reduction]]), 1:2)
+    
+    ggplot(df, aes_string(x=dims[1], y=dims[2])) + 
+        geom_point(aes_string(color="Feature"), size=dot.size)+
+        scale_colour_gradient(low='gray',high='blue')+
+        ggtitle(title) + theme_classic()
 }
 
 
@@ -401,4 +589,3 @@ TrueCells <- function(df, celltype = c("B_cells","MCL")){
     cell_df <- Reduce(function(x, y) merge(x, y, by = "row.names",all.x= TRUE), cell_id)
     return(cell_df[,4])
 }
-

@@ -1,7 +1,11 @@
+library(dplyr)
+library(magrittr)
+library(Seurat)
+
 #' .AddMetaColor: prepare meta.data data frame to store color code
-#' @mat factor at column 1, rownames is cell.names
-#' @colors vector of hex colors
-#' @df_colors data frame to add to meta data directly
+#' @param mat factor at column 1, rownames is cell.names
+#' @param colors vector of hex colors
+#' @param df_colors data frame to add to meta data directly
 #' @example 
 # singlerDF = .AddMetaColor(mat = singler$singler[[2]]$SingleR.single$labels,
 #                        colors = singler_colors[3:26])
@@ -130,7 +134,7 @@ AddMetaColor<- function(object, label = NULL, colors = NULL){
 #' @param df marker data frame with Alias notation
 #' @param gene gene name
 #' @example Alias(df = df_markers, gene = "CD19")
-Alias <- function(df, gene = "PDCD1"){
+Alias1 <- function(df, gene = "PDCD1"){
         
         if(!all(grep("Alias|alias",colnames(df)) %%2 ==0)) stop("Check Alias Names!")
         df = as.data.frame(df)
@@ -147,6 +151,59 @@ Alias <- function(df, gene = "PDCD1"){
                 return(paste0(" (",new_df[gene,"alias"],")"))
 }
 
+#' find Alias gene names
+#' @param df marker data frame with Alias notation
+#' @param gene gene name
+#' @example Alias(df = df_markers, gene = "Cd19")
+Alias <- function(df, gene = "HLA-DRB1"){
+        
+        df = as.data.frame(df)
+        df_remove_alias = df[,-grep("Alias",colnames(df))]
+        species <- CheckSpecies(gene)
+        gene = toupper(gene)
+        ind <- which(df_remove_alias == gene, arr.ind = TRUE)
+        if(nrow(ind) == 0) return(NULL) # no record
+        # unique gene name has alias
+        ind <- which(df == gene, arr.ind = TRUE)
+        if(nrow(ind) == 1) {
+                cell_type <- colnames(df)[ind[2]]
+                gene.alias <-  df[ind[1],paste0(cell_type,".Alias")]
+        } else {
+                # duplicate gene name and has no alias
+                if(nrow(ind) > 1 & (ind[2,2]-ind[1,2]==1)) return(NULL)
+        
+                # duplicate gene name and has alias
+                if(nrow(ind) > 1 & (ind[2,2]-ind[1,2]!=1)) {
+                        cell_type <- colnames(df)[ind[1,2]]
+                        gene.alias = df[ind[1,1],paste0(cell_type,".Alias")]
+                }
+        }
+        if(CheckSpecies(gene)=="Mouse") {
+            gene.alias = paste0(" (",Hmisc::capitalize(tolower(gene.alias)),")")
+        }
+        if(CheckSpecies(gene)=="Human") {
+            gene.alias = paste0(" (",toupper(tolower(gene.alias)),")")
+        }
+        return(gene.alias)
+        }
+
+
+#' check sepcies
+#' @param subject could be Seurat object, or gene names
+#' @example CheckSpecies("CD8A")
+#' @example CheckSpecies(object)
+CheckSpecies <- function(subject){
+        if(class(subject)=="seurat"){
+                subject = rownames(subject@raw.data)[1]    
+        }
+        # Human gene
+        if(subject == toupper(subject))
+                return("Human")
+        # Mouse gene
+        if(subject == Hmisc::capitalize(tolower(subject)))
+                return("Mouse") 
+
+}
 
 # Combine and print multiple PNG,
 #' @param ... PNG path
@@ -197,51 +254,51 @@ CountsbyIdent <- function(object,subset.name,...){
 #' @param gradient.use Change fill and colour gradient values
 #' @param scaled.expression.threshold Define lower limit of scaled gene expression level
 #' @export p ggplot object
-ChangeColorScale <- function(p, alpha.use = 0.8,
+ChangeColorScale <- function(p1, alpha.use = 1,legend.title = "log(UMI)",
                              gradient.use = c("yellow", "red"),
-                             scaled.expression.threshold = 0) {
+                             scaled.expression.threshold = NULL) {
     # Order data by scaled gene expresion level
     # Compute maximum value in gene expression
-    if (length(p$data$scaled.expression)>0){                # FeatureHeatmap.1
-        p$data <- p$data[order(p$data$scaled.expression),]
-        max.scaled.exp <- max(p$data$scaled.expression)
-    } else if (length(p$data$gene)>0){                   # SingleFeaturePlot.1 
-        p$data <- p$data[order(p$data$gene),] 
-        max.scaled.exp <- max(p$data$gene) 
+    if (length(p1$data$scaled.expression)>0){                # FeatureHeatmap.1
+        p1$data = p1$data[order(p1$data$scaled.expression),]
+        max.scaled.exp <- max(p1$data$scaled.expression)
+    } else if (length(p1$data$gene)>0){                   # SingleFeaturePlot.1 
+        p1$data = p1$data[order(p1$data$gene),] 
+        max.scaled.exp <- max(p1$data$gene) 
     }
     
     # Define lower limit of scaled gene expression level
     if (!is.null(scaled.expression.threshold)) {
         scaled.expression.threshold <- scaled.expression.threshold
     } else if (is.null(scaled.expression.threshold)) {
-        if (length(p$data$scaled.expression)>0){
-            scaled.expression.threshold <- min(p$data$scaled.expression)
-        } else if (length(p$data$gene)>0) {
-            scaled.expression.threshold <- min(p$data$gene)
+        if (length(p1$data$scaled.expression)>0){
+            scaled.expression.threshold <- min(p1$data$scaled.expression)+0.0001
+        } else if (length(p1$data$gene)>0) {
+            scaled.expression.threshold <- min(p1$data$gene)+0.0001
         }
     }
     
     # Fill points using the scaled gene expression levels
-    p$layers[[1]]$mapping$fill <- p$layers[[1]]$mapping$colour
+    p1$layers[[1]]$mapping$fill <- p1$layers[[1]]$mapping$colour
     
     # Define transparency of points
-    p$layers[[1]]$mapping$alpha <- alpha.use
+    p1$layers[[1]]$mapping$alpha <- alpha.use
     
     # Change fill and colour gradient values
-    p = p + guides(colour = FALSE)
-    p = p + scale_colour_gradientn(colours = gradient.use, guide = F,
+    p1 = p1 + guides(colour = FALSE)
+    p1 = p1 + scale_colour_gradientn(colours = gradient.use, guide = F,
                                    limits = c(scaled.expression.threshold,
                                               max.scaled.exp),
                                    na.value = "grey") +
         scale_fill_gradientn(colours = gradient.use,
-                             name = expression(atop(Scaled, expression)),
+                             name = legend.title,
                              limits = c(scaled.expression.threshold,
                                         max.scaled.exp),
                              na.value = "grey") +
         scale_alpha_continuous(range = alpha.use, guide = F)
     
     # Return plot
-    return(p)
+    return(p1)
 }
 
 
@@ -302,21 +359,34 @@ DimElbowPlot.1 <- function (object, reduction.type = "pca", dims.plot = 20,slot 
 
 
 #' DoHeatmap.1, automatically group_top by cluster, order by Time_points
-#example    top <- group_top_mutate(df = All_markers, major_cells)
-#           top %>% head(20) %>% kable() %>% kable_styling()
-#           DoHeatmap.1(SSCs,top,Top_n = 15, 
+#example  DoHeatmap.1(SSCs,top,Top_n = 15,
 #                   group.order = major_cells,ident.use = "all cell types",
 #                   group.label.rot = T,cex.row = 5,remove.key =T)
 #
 DoHeatmap.1 <- function(object, marker_df, add.genes = NULL, gene.sets = NULL,
-                        Top_n = 10, group.order = NULL,ident.use,
+                        Top_n = 10, group.order = NULL,cex.col=10,
+                        title=paste("Top",Top_n,"differentially expressed genes in all cells"),
                         group.label.rot =T,cex.row = 8,remove.key =T,use.scaled = T,
-                        group.cex = 13,title.size = 14,...){
+                        group.cex = 13,title.size = 14,do.print = FALSE){
     if (!missing(x = marker_df)) {
-        colnames(marker_df)[8] = "cluster"
-        top <-  marker_df %>% 
-            group_by(cluster) %>% 
-            top_n(Top_n, avg_logFC)
+            if(min(marker_df$avg_logFC) > 0){
+                    colnames(marker_df)[8] = "cluster"
+                    top <-  marker_df %>% 
+                            group_by(cluster) %>% 
+                            .[!duplicated(.$gene),] %>% 
+                            top_n(Top_n, avg_logFC)
+            }
+            if(min(marker_df$avg_logFC) < 0){
+                    colnames(marker_df)[8] = "cluster"
+                    top <-  marker_df %>% 
+                            group_by(cluster) %>% 
+                            top_n(Top_n, avg_logFC)
+                    bottom <-  marker_df %>% 
+                            group_by(cluster) %>% 
+                            top_n(Top_n, -avg_logFC)
+                    top = rbind.data.frame(top,bottom)
+            }
+
         } else { 
             top <- list()
             top$gene = NULL
@@ -325,19 +395,23 @@ DoHeatmap.1 <- function(object, marker_df, add.genes = NULL, gene.sets = NULL,
         top_gene = c(as.character(top$gene),add.genes)
     } else top_gene <- top$gene
     heatmap <- DoHeatmap(object = object, genes.use = top_gene, #gene.sets = gene.sets,
-                         group.order = group.order, use.scaled = use.scaled,
+                         group.order = group.order, use.scaled = use.scaled,cex.col=cex.col,
                          slim.col.label = TRUE, remove.key = remove.key,cex.row = cex.row,
                          group.cex = group.cex, rotate.key = T,group.label.rot = group.label.rot,
-                         title = paste("Top",Top_n,
-                                       "differentially expressed genes in",
-                                       ident.use),...)
+                         title = title)
     heatmap = heatmap+ theme(plot.title = element_text(size=title.size))
-    return(heatmap)
+    if(do.print){
+            path <- paste0("./output/",gsub("-","",Sys.Date()),"/")
+            if(!dir.exists(path)) dir.create(path, recursive = T)
+            jpeg(paste0(path,title,".jpeg"), units="in", width=10, height=7,res=600)
+            print(heatmap)
+            dev.off()
+    } else return(heatmap)
 }
 
 
 #' Modified Seurat::DimPlot function to add ggrepel::geom_text_repel and ggrepel::geom_label_repel
-#' A supporting function for TSNEPlot.1
+#' A supporting function for lot.1
 #' @param object Seurat object
 #' @param text.repel Adds text directly to the plot.
 #' @param label.repel Draws a rectangle underneath the text, making it easier to read.
@@ -346,8 +420,8 @@ DoHeatmap.1 <- function(object, marker_df, add.genes = NULL, gene.sets = NULL,
 #' @export p/p3 ggplot object
 #' @example DimPlot.1(SSCs, reduction.use = "tsne")
 DimPlot.1 <- function (object, reduction.use = "pca", dim.1 = 1, dim.2 = 2,
-                       cells.use = NULL, alpha = 1,pt.size = 1, do.return = FALSE, do.bare = FALSE,
-                       cols.use = NULL, group.by = "ident", pt.shape = NULL, do.hover = FALSE,
+                       cells.use = NULL, alpha = 1,pt.size = 1, do.return = TRUE, do.bare = FALSE,do.print =FALSE,
+                       colors.use = NULL,cols.use = NULL, group.by = "ident", pt.shape = NULL, do.hover = FALSE,
                        data.hover = "ident", do.identify = FALSE, do.label = FALSE,
                        label.size = 4, no.legend = FALSE, coord.fixed = FALSE,
                        no.axes = FALSE, dark.theme = FALSE, plot.order = NULL,
@@ -510,7 +584,7 @@ DimPlot.1 <- function (object, reduction.use = "pca", dim.1 = 1, dim.2 = 2,
         centers <- data.plot %>% dplyr::group_by(ident) %>%
             dplyr::summarize(x = median(x), y = median(y))
         p3 = p3 + geom_point(data = centers, aes(x = x, y = y),
-                             size = 0, alpha = 0)
+                             size = 0, alpha = alpha)
         if (label.repel == TRUE) {
             p3 = p3 + ggrepel::geom_label_repel(data = centers,
                                                 aes(label = ident),
@@ -566,6 +640,17 @@ DimPlot.1 <- function (object, reduction.use = "pca", dim.1 = 1, dim.2 = 2,
                                   dark.theme = dark.theme, ...))
         }
     }
+    if(do.print){
+        path <- paste0("./output/",gsub("-","",Sys.Date()),"/")
+        if(!dir.exists(path)) dir.create(path, recursive = T)
+        if(is.na(FindIdentLabel(object))){
+            s <- "NA"
+        } else s <- unique(object@meta.data[,FindIdentLabel(object)])
+        jpeg(paste0(path,paste(s[1:min(length(s),2)],collapse = "_"),
+        ".jpeg"), units="in", width=10, height=7,res=600)
+        print(p3)
+        dev.off()
+    }
     if (do.return) {
         if (do.bare) {
             return(p)
@@ -576,9 +661,6 @@ DimPlot.1 <- function (object, reduction.use = "pca", dim.1 = 1, dim.2 = 2,
     }
     if (do.bare) {
         print(p)
-    }
-    else {
-        print(p3)
     }
 }
 
@@ -608,8 +690,57 @@ ExtractMetaColor <- function(object,color_index = NULL){
                 df_colors = df_colors[order(df_colors$index),]
             }
     
-    return(as.character(df_colors[,color_index]))
+    return(base::as.character(df_colors[,color_index]))
 }
+
+
+
+
+#' use Findmark results to generate eulerr data frame for venn diagram
+#' @param df Seruat::FindMarkers results.
+#' @param shape shape of venn diagram
+#' @param key Names of venn diagram catergroy, which must be the sub components of df$cluster.
+#'  defaul NULL means all components of df$cluster.
+#' @param cut_off choose within c("p_val","p_val_adj","avg_logFC")
+#' @param cut_off_value corrsponding cut off value.
+#' @param eulerr::euler table
+#' @param do.legend TRUE/FALSE
+#' @param do.return TRUE/FALSE return plot
+#' @param do.print print figures
+#' @export g plot object
+#' @example eulerr(T_cells_markers,shape =  "ellipse",cut_off = "avg_logFC", cut_off_value = 0.01)
+eulerr <- function(df, shape =  "circle", key = NULL,cut_off = "avg_logFC",
+                   cut_off_value = 0.05, do.lenged = TRUE,do.return = TRUE, do.print = FALSE,...){
+        file.name = deparse(substitute(df))
+        df$cluster <- as.vector(df$cluster)
+        df$gene <- as.vector(df$gene)
+        if(!is.null(key)) df <- df[(df$cluster %in% key),]
+        df_list <- split(df,df$cluster)
+        
+        if(cut_off == "avg_logFC"){
+                pos.share_genes <- sapply(df_list, function(df) df[(df$avg_logFC > -cut_off_value),"gene"])
+        }  
+        if(any(cut_off %in% c("p_val","p_val_adj"))){
+                pos_genes <- lapply(df_list, function(df) df[(df$avg_logFC > 0),"gene"])
+                shared_genes <- lapply(df_list, function(df) df[(abs(df[,cut_off]) > cut_off_value),"gene"])
+                pos.share_genes <- mapply(function(x,y) unique(c(x,y)), pos_genes, shared_genes)
+        }
+        euler_df <- eulerr::euler(pos.share_genes,shape = shape,...)
+        
+        g <- plot(euler_df, quantities = TRUE, lty = 1:6,
+                  legend = do.lenged, main = paste(cut_off," : ",cut_off_value))
+        if(do.print) {
+                path <- paste0("./output/",gsub("-","",Sys.Date()),"/")
+                if(!dir.exists(path)) dir.create(path, recursive = T)
+                jpeg(paste0(path,"Venn_",file.name,"_",cut_off,
+                            "_",cut_off_value,".jpeg"), units="in", width=10, height=7,res=600)
+                print(g)
+                dev.off()
+        }
+        if(do.return) return(g)
+        
+}
+
 
 #' Modified Seurat::FeatureHeatmap function to increase contrast gradient
 #' 
@@ -621,21 +752,20 @@ ExtractMetaColor <- function(object,color_index = NULL){
 #' @export p ggplot object
 #' @example FeatureHeatmap.1(SSCs,"Gfra1")
 FeatureHeatmap.1 <- function(object, features.plot, mouse.genes = TRUE,
-                             group.by ="orig.ident",  alpha.use = 1,
+                             group.by ="orig.ident",  alpha.use = 1,legend.title = "log(UMI)",
                              pt.size = 0.5, scaled.expression.threshold = 0.1,
-                             gradient.use = c("orangered", "red4"),
+                             gradient.use = c("grey50", "red4"),
                              pch.use = 20) {
     
-    if (mouse.genes) features.plot = MouseGenes(object =  object, unique = T,
+    if (mouse.genes) features.plot = FilterGenes(object =  object, unique = T,
                                                 marker.genes = features.plot)
-    else features.plot = HumanGenes(object =  object, unique = T,
+    else features.plot = FilterGenes(object =  object, unique = T,
                                     marker.genes = features.plot)
     
     x <- FeatureHeatmap(object = object, features.plot = features.plot,
                         group.by = group.by, sep.scale = T, pt.size = pt.size, 
                         cols.use = c("gray98", "red"), pch.use = pch.use, do.return = T)
-    x$data <- x$data[order(x$data$expression),]
-    p <- ChangeColorScale(x, alpha.use = alpha.use,
+    p <- ChangeColorScale(x, alpha.use = alpha.use,legend.title=legend.title,
                           scaled.expression.threshold = scaled.expression.threshold,
                           gradient.use = gradient.use)
     return(p)
@@ -773,7 +903,7 @@ FindAllMarkers.UMI <- function (object, genes.use = NULL, logfc.threshold = 0.25
             FindMarkers.UMI(object = object, assay.type = assay.type, 
                         ident.1 = idents.all[i], ident.2 = NULL, genes.use = genes.use, 
                         logfc.threshold = logfc.threshold, test.use = test.use, 
-                        min.pct = min.pct, min.diff.pct = min.diff.pct, 
+                        min.pct = min.pct, min.diff.pct = min.diff.pct, only.pos = only.pos,
                         print.bar = print.bar, min.cells.gene = min.cells.gene, 
                         min.cells.group = min.cells.group, latent.vars = latent.vars, 
                         max.cells.per.ident = max.cells.per.ident, ...)
@@ -826,8 +956,9 @@ FindAllMarkers.UMI <- function (object, genes.use = NULL, logfc.threshold = 0.25
 FindIdentLabel <- function(object){
     ident.label <- as.vector(object@ident)
     labels <- sapply(object@meta.data,
-                     function(x) all(ident.label == x)) %>% .[.]
-    return(names(labels[labels]))
+                     function(x) all(ident.label == x)) %>% .[.] %>% .[!is.na(.)]
+    label <- names(labels[labels])[1]
+    return(label)
 }
 
 
@@ -845,22 +976,23 @@ FindMarkers.UMI <- function (object, ident.1, ident.2 = NULL, genes.use = NULL,
 {
     genes.de <- FindMarkers(object = object, assay.type = assay.type, 
                             ident.1 = ident.1, ident.2 = ident.2, genes.use = genes.use, 
-                            logfc.threshold = logfc.threshold, test.use = test.use, 
+                            logfc.threshold = logfc.threshold/log2(exp(1)), test.use = test.use, 
                             min.pct = min.pct, min.diff.pct = min.diff.pct, 
                             print.bar = print.bar, only.pos = only.pos, min.cells.gene = min.cells.gene, 
                             min.cells.group = min.cells.group, latent.vars = latent.vars, 
                             max.cells.per.ident = max.cells.per.ident,...)
-    UMI.1 <- Matrix::rowMeans(x = object@raw.data[, WhichCells(object = object,
-                                                            ident = ident.1)])
+    genes.de$avg_logFC = log2(exp(1)) * genes.de$avg_logFC
+    ave_UMI.1 <- Matrix::rowMeans(expm1(x = object@data[, WhichCells(object = object,
+                                                            ident = ident.1)]))
     if(is.null(ident.2)) {
-            UMI.2 <- Matrix::rowMeans(x = object@raw.data[, WhichCells(object = object,
-                                                                        ident.remove = ident.1)])
-    } else UMI.2 <- Matrix::rowMeans(x = object@raw.data[, WhichCells(object = object,
-                                                                       ident = ident.2)])
+        ave_UMI.2 <- Matrix::rowMeans(expm1(x = object@data[, WhichCells(object = object,
+                                                                        ident.remove = ident.1)]))
+    } else ave_UMI.2 <- Matrix::rowMeans(expm1(x = object@data[, WhichCells(object = object,
+                                                                       ident = ident.2)]))
     
-    avg_UMI <-data.frame(UMI.1, UMI.2)
+    avg_UMI <-data.frame(ave_UMI.1, ave_UMI.2)
     genes.de <- cbind(genes.de,avg_UMI[match(rownames(genes.de),rownames(avg_UMI)),])
-    
+
     return(genes.de)
 }
 
@@ -871,33 +1003,77 @@ FindMarkers.UMI <- function (object, ident.1, ident.2 = NULL, genes.use = NULL,
 #' @param ident.2 dent.2 list
 #' @param ... all paramethers are the same as Seurat::FindMarkers
 #' @export gde.all data frame
+#' @export save.path folder to save
 #' @example FindPairMarkers(object, ident.1 = 1:8, ident.2 = c(5:8,1:4))
 FindPairMarkers <- function(object, ident.1, ident.2 = NULL, genes.use = NULL,return.thresh = 0.05,
                             logfc.threshold = 0.05, test.use = "MAST", min.pct = 0.1,
-                            min.diff.pct = -Inf, print.bar = TRUE, only.pos = TRUE,
+                            min.diff.pct = -Inf, print.bar = TRUE, only.pos = FALSE,
                             max.cells.per.ident = Inf, random.seed = 1, latent.vars = "nUMI",
                             min.cells.gene = 3,min.cells.group=3, pseudocount.use = 1, 
-                            assay.type = "RNA",...){
-    
+                            assay.type = "RNA",save.path = NULL,save.files = TRUE,...){
+    #prepare save folder name
     gde <- list()
+    if(class(ident.1) != "list" | class(ident.2) != "list") {
+            ident.1 = as.list(ident.1)
+            ident.2 = as.list(ident.2)
+    }
     for(i in 1:length(ident.1)) {
-        ident.1vs2 <- paste(ident.1[i], ident.2[i], sep = ".vs.")
+        ident.1vs2 <- paste0(paste(ident.1[[i]],collapse = "_"), " vs.",
+                             paste(ident.2[[i]],collapse = "_"))
         print(ident.1vs2)
-        gde[[i]] <- FindMarkers.UMI(object = object, ident.1 = ident.1[i],
-                                    ident.2 = ident.2[i], assay.type = assay.type, 
+        num1 <- unique(gsub('.*\\_', '', ident.1[[i]]))
+        num2 <- unique(gsub('.*\\_', '', ident.2[[i]]))
+        if(num1 == num2) num1 = ""
+        gde[[i]] <- FindMarkers.UMI(object = object, ident.1 = ident.1[[i]],
+                                    ident.2 = ident.2[[i]], assay.type = assay.type, 
                                     genes.use = genes.use, 
                                     logfc.threshold = logfc.threshold, test.use = test.use, 
                                     min.pct = min.pct, min.diff.pct = min.diff.pct, 
                                     print.bar = print.bar, only.pos = only.pos, min.cells.gene = min.cells.gene, 
                                     min.cells.group = min.cells.group, latent.vars = latent.vars, 
-                                    max.cells.per.ident = max.cells.per.ident, ...)
-        gde[[i]] <- gde[[i]][order(gde[[i]]$p_val, -gde[[i]]$avg_logFC),]
+                                    max.cells.per.ident = max.cells.per.ident)
+        gde[[i]] <- gde[[i]][order(-gde[[i]]$avg_logFC,gde[[i]]$p_val),]
         gde[[i]] <- subset(x = gde[[i]], subset = p_val < return.thresh)
         gde[[i]]$cluster1.vs.cluster2 <- ident.1vs2
         gde[[i]]$gene <- rownames(x = gde[[i]])
+        if(save.files){
+            if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
+            write.csv( gde[[i]], paste0(save.path,ident.1vs2,".csv"))
+        }
     }
-    
     return(bind_rows(gde))
+}
+
+
+# FilterGenes
+#' filter gene names according to seurat object, produce uniformed gene format
+#' pass non-existing genes or ill-formaed genes names to downstream analysis
+#' will generate error
+#' @param object Seurat object version 2
+#' @param marker.genes gene names, marker.genes =c("Cdh5,Pecam1,Flt1,Vwf,Plvap,Kdr") for example
+#' @param unique return unique name or not
+#' @export marker.genes filtered, well-format gene names
+#' @example FilterGenes(object, c("Cdh5,Pecam1,Flt1,Vwf,Plvap,Kdr"))
+FilterGenes <- function(object, marker.genes, unique= TRUE){
+        if(missing(object)) 
+                stop("A seurat object must be provided first")
+        if(class(object) != "seurat") 
+                stop("A seurat object must be provided first")
+        if(missing(marker.genes)) 
+                stop("A list of marker genes must be provided")
+
+                marker.genes <- as.character(marker.genes)
+        marker.genes <- unlist(strsplit(marker.genes,","))
+        
+        species = CheckSpecies(object)
+        if(species == "Human") marker.genes <- toupper(marker.genes)
+        if(species == "Mouse") marker.genes <- Hmisc::capitalize(tolower(marker.genes)) 
+
+        print(paste("Before filtration:",length(marker.genes)))
+        marker.genes <- CaseMatch(search = marker.genes, match = rownames(x = object@raw.data))
+        if(unique) marker.genes <- unique(marker.genes)
+        print(paste("After filtration:",length(marker.genes)))
+        return(as.character(marker.genes))
 }
 
 
@@ -923,13 +1099,13 @@ GC <- function()
 #' @param object aligned seurat object with ident
 #' @param return.vector TRUE/return full color vector, FALSE/return color levels
 #' @param cells.use only return ColorHexa of selected cells
-#' @param ... other TSNEPlot inputs 
+#' @param ... other lot inputs 
 #' @export colors: color vector named by cell ID
 gg_colors <- function(object = object, return.vector=FALSE, cells.use = NULL,
                       print.plot = T, no.legend = TRUE, do.label = TRUE,colors.use =NULL,
                       do.return = TRUE, label.size = 6, gg_title="", ...){
     
-    g1 <- Seurat::TSNEPlot(object = object, no.legend = no.legend,
+    g1 <- Seurat::lot(object = object, no.legend = no.legend,
                            do.label = do.label,do.return = do.return,
                            label.size = label.size, colors.use= colors.use,...)
     if(print.plot) print(g1)
@@ -1042,7 +1218,7 @@ GenePlot.1 <- function (object, gene1, gene2, cell.ids = NULL, col.use = NULL,
         p <- ggplot2::ggplot(data = data.plot, mapping = aes(x = x, 
                                                              y = y))
         p <- p + geom_point(mapping = aes(x = x,y=y, color = col.use), size = pt.size, 
-                            shape = pch.use )
+                            shape = pch.use)
         p <- p + labs(title = paste0(title,"\n",gene.cor), x = gene1, y = gene2)
         if (no.legend) {
             p <- p + theme(legend.position = "none")
@@ -1106,12 +1282,12 @@ MakeCorlorBar <- function(object, marker_df, Top_n = NULL, add.genes = NULL, col
                           remove.legend =F, do.print = TRUE,do.return=FALSE){
     
         if(!is.null(Top_n)){
-        colnames(marker_df)[8] ="cluster"
-        marker_df <-  marker_df %>% 
+        colnames(marker_df)[grep("cluster",colnames(marker_df))[1]] ="cluster"
+        marker_df <- marker_df %>% 
         group_by(cluster) %>% 
-        top_n(Top_n, avg_logFC) %>%
-        .[,c("gene","cluster")]
+        top_n(Top_n, avg_logFC)
         }
+        marker_df <- marker_df[,c("gene","cluster")]
         
         if(!is.null(add.genes)){
         marker_bar <- data.frame("gene" = add.genes,
@@ -1120,50 +1296,123 @@ MakeCorlorBar <- function(object, marker_df, Top_n = NULL, add.genes = NULL, col
                                      marker_bar)
         }
 
-    gene.use = rownames(object@scale.data)
-    marker_df = marker_df[!duplicated(marker_df$gene),]
-    marker_df = marker_df[marker_df$gene %in% gene.use,]
-    
-    marker_df$x <- 1:nrow(marker_df)
-    
-    wide <- table(marker_df$cluster) %>% as.data.frame
-    colnames(wide) = c("cluster","w")
-    
-    marker_df %<>%   dplyr::left_join(wide, by = "cluster") %>%
-            group_by(cluster) %>% 
-            summarise(median = median(x, na.rm = TRUE)) %>%
-            dplyr::inner_join(wide, by = "cluster")
-    
-    g <- ggplot(data = marker_df, aes(xmin = median - w / 2, xmax = median + w / 2,
+        gene.use = rownames(object@scale.data)
+        marker_df = marker_df[!duplicated(marker_df$gene),]
+        marker_df = marker_df[marker_df$gene %in% gene.use,]
+        
+        marker_df$x <- 1:nrow(marker_df)
+        marker_df$cluster = as.factor(marker_df$cluster)
+        level = unique(marker_df$cluster)
+        #marker_df$x = as.factor(marker_df$x)
+        
+        wide <- table(marker_df$cluster) %>% as.data.frame
+        colnames(wide) = c("cluster","w")
+        
+        marker_df %<>%   dplyr::left_join(wide, by = "cluster") %>%
+                group_by(cluster) %>%
+                dplyr::summarise(median = median(x, na.rm = TRUE)) %>%
+                dplyr::inner_join(wide, by = "cluster")
+        marker_df$cluster %<>% factor(levels = level)
+        g <- ggplot(data = marker_df, aes(xmin = median - w / 2, xmax = median + w / 2,
                                       ymin = 0, ymax = 1, fill = cluster)) +
         geom_rect(colour = "white")+
         theme_bw() + 
         theme(panel.border = element_blank(),
-              panel.grid.major = element_blank(),
-              panel.grid.minor = element_blank(),
-              axis.line = element_blank(), 
-              axis.title.x=element_blank(),
-              axis.text.x=element_blank(),
-              axis.ticks.x=element_blank(),
-              axis.title.y=element_blank(),
-              axis.text.y=element_blank(),
-              axis.ticks.y=element_blank())+
+                panel.grid.major = element_blank(),
+                panel.grid.minor = element_blank(),
+                axis.line = element_blank(), 
+                axis.title.x=element_blank(),
+                axis.text.x=element_blank(),
+                axis.ticks.x=element_blank(),
+                axis.title.y=element_blank(),
+                axis.text.y=element_blank(),
+                axis.ticks.y=element_blank())+
         coord_flip() + scale_x_reverse()
-    if(remove.legend) g = g + theme(legend.position="none")
-    if(!is.null(color)) {
+        if(remove.legend) g = g + theme(legend.position="none")
+        if(!is.null(color)) {
         colors_fill = color_scheme(color = color,
                                    names = unique(marker_df$cluster))
         g = g + scale_fill_manual(values = colors_fill)
-    }
-    if(do.print) {
+        }
+        if(do.print) {
         path <- paste0("./output/",gsub("-","",Sys.Date()),"/")
         if(!dir.exists(path)) dir.create(path, recursive = T)
         jpeg(paste0(path,deparse(substitute(object)),"vertical_bar.jpeg"), units="in", width=10, height=7,res=600)
         print(g)
         dev.off()
-    } else if(do.return) {
+        } else if(do.return) {
         return(g)
-    }
+        }
+}
+
+
+
+
+# make horizontal color bar==========
+# make horizontal corlor bar for DoHeatmap
+#' @param object Seurat object
+#' @param group_by The criteria to group horizontal bar
+#' @param split.by labels for each  horizontal bar
+#' @param color color scheme
+#' @export g vertical ggplot
+#' @example MakeHCorlorBar(B_cells_MCL,group_by = "X5_clusters")
+
+MakeHCorlorBar <- function(object, group_by = "X5_clusters", remove.legend = F,
+                           file_name = "DE_clusters_top50",
+                           split.by = "singler1sub",do.print = TRUE,do.return=FALSE){
+        
+        (group_index <- unique(object@meta.data[,group_by]) %>% sort)
+        if(!paste0(split.by,".colors") %in% colnames(object@meta.data)){
+                # add color to cluster
+                gg_color_hue <- function(n) {
+                        hues = seq(15, 375, length = n + 1)
+                        grDevices::hcl(h = hues, l = 65, c = 100)[1:n]
+                }
+                color_num <- length(unique(object@meta.data[,split.by]))
+                object <- AddMetaColor(object, label= split.by, 
+                                       colors = gg_color_hue(color_num))
+                
+        }
+        for(ind in group_index){
+                b_color_bar <- object@meta.data[(object@meta.data[,group_by] %in% ind),]
+                b_color_bar$x <- 1:nrow(b_color_bar)
+                
+                col_index <- which(colnames(b_color_bar) %in% c(split.by,paste0(split.by,".colors")))
+                
+                b_color_bar[,col_index] = sapply(b_color_bar[,col_index],as.character)
+                b_color_bar$labels = b_color_bar[,split.by]
+                g <- ggplot(data = b_color_bar, aes(x, split.by, fill = labels)) +
+                        geom_tile()+
+                        theme_bw() +
+                        theme(panel.border = element_blank(),
+                              panel.grid.major = element_blank(),
+                              panel.grid.minor = element_blank(),
+                              axis.line = element_blank(),
+                              axis.title.x=element_blank(),
+                              axis.text.x=element_blank(),
+                              axis.ticks.x=element_blank(),
+                              axis.title.y=element_blank(),
+                              axis.text.y=element_blank(),
+                              axis.ticks.y=element_blank())
+                if(remove.legend) g = g + theme(legend.position="none")
+                
+                # prepare color scheme
+                dup <- duplicated(b_color_bar[,col_index[1]])
+                colors_df <- b_color_bar[!dup,col_index]
+                colors_df <- colors_df[order(colors_df[,1]),]
+                colors_fill = colors_df[,paste0(split.by,".colors")]
+                g = g + scale_fill_manual(values = colors_fill)
+                
+                path <- paste0("output/",gsub("-","",Sys.Date()),"/",file_name,"/")
+                if(!dir.exists(path)) dir.create(path, recursive = T)
+                if(do.print) {
+                        jpeg(paste0(path,ind,"_","horizontal_bar.jpeg"), units="in",width=10, height=7,res=600)
+                        print(g)
+                        dev.off()
+                } else if(do.return) {
+                        return(g)
+                }
+        }
 }
 
 
@@ -1222,6 +1471,132 @@ randomStrings <- function(n = 5000) {
 #'         SSCs <- RenameIdent.1(SSCs, new.ident.name = names(SSC_labels_id)[i],
 #'                               cells.use = SSC_labels_id[[i]])
 #' }
+
+
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # For output from CellRanger < 3.0
+#' data_dir <- 'path/to/data/directory'
+#' list.files(data_dir) # Should show barcodes.tsv, genes.tsv, and matrix.mtx
+#' expression_matrix <- Read10X(data.dir = data_dir)
+#' seurat_object = CreateSeuratObject(counts = expression_matrix)
+#'
+#' # For output from CellRanger >= 3.0 with multiple data types
+#' data_dir <- 'path/to/data/directory'
+#' list.files(data_dir) # Should show barcodes.tsv.gz, features.tsv.gz, and matrix.mtx.gz
+#' data <- Read10X(data.dir = data_dir)
+#' seurat_object = CreateSeuratObject(counts = data$`Gene Expression`)
+#' seurat_object[['Protein']] = CreateAssayObject(counts = data$`Antibody Capture`)
+#' }
+#'
+Read10X.1 <- function(data.dir = NULL, gene.column = 2, unique.features = TRUE) {
+    full.data <- list()
+    for (i in seq_along(along.with = data.dir)) {
+        run <- data.dir[i]
+        if (!dir.exists(paths = run)) {
+            stop("Directory provided does not exist")
+        }
+        # if (!grepl(pattern = "\\/$", x = run)) {
+        #   run <- paste0(run, "/")
+        # }
+        # barcode.loc <- paste0(run, "barcodes.tsv")
+        barcode.loc <- file.path(run, 'barcodes.tsv')
+        # gene.loc <- paste0(run, "genes.tsv")
+        gene.loc <- file.path(run, 'genes.tsv')
+        # features.loc <- paste0(run, "features.tsv.gz")
+        features.loc <- file.path(run, 'features.tsv.gz')
+        # matrix.loc <- paste0(run, "matrix.mtx")
+        matrix.loc <- file.path(run, 'matrix.mtx')
+        # Flag to indicate if this data is from CellRanger >= 3.0
+        pre_ver_3 <- file.exists(gene.loc)
+        if (!pre_ver_3) {
+            addgz <- function(s) {
+                return(paste0(s, ".gz"))
+            }
+            barcode.loc <- addgz(s = barcode.loc)
+            matrix.loc <- addgz(s = matrix.loc)
+        }
+        if (!file.exists(barcode.loc)) {
+            stop("Barcode file missing")
+        }
+        if (!pre_ver_3 && !file.exists(features.loc) ) {
+            stop("Gene name or features file missing")
+        }
+        if (!file.exists(matrix.loc)) {
+            stop("Expression matrix file missing")
+        }
+        data <- readMM(file = matrix.loc)
+        cell.names <- readLines(barcode.loc)
+        if (all(grepl(pattern = "\\-1$", x = cell.names))) {
+            cell.names <- as.vector(x = as.character(x = sapply(
+            X = cell.names,
+            FUN = ExtractField,
+            field = 1,
+            delim = "-"
+            )))
+        }
+        if (is.null(x = names(x = data.dir))) {
+            if (i < 2) {
+                colnames(x = data) <- cell.names
+            } else {
+                colnames(x = data) <- paste0(i, "_", cell.names)
+            }
+        } else {
+            colnames(x = data) <- paste0(names(x = data.dir)[i], "_", cell.names)
+        }
+        feature.names <- read.delim(
+        file = ifelse(test = pre_ver_3, yes = gene.loc, no = features.loc),
+        header = FALSE,
+        stringsAsFactors = FALSE
+        )
+        if (unique.features) {
+            rownames(x = data) <- make.unique(names = feature.names[, gene.column])
+        }
+        # In cell ranger 3.0, a third column specifying the type of data was added
+        # and we will return each type of data as a separate matrix
+        if (ncol(x = feature.names) > 2) {
+            data_types <- factor(x = feature.names$V3)
+            lvls <- levels(x = data_types)
+            if (length(x = lvls) > 1 && length(x = full.data) == 0) {
+                message("10X data contains more than one type and is being returned as a list containing matrices of each type.")
+            }
+            expr_name <- "Gene Expression"
+            if (expr_name %in% lvls) { # Return Gene Expression first
+                lvls <- c(expr_name, lvls[-which(x = lvls == expr_name)])
+            }
+            data <- lapply(
+            X = lvls,
+            FUN = function(l) {
+                return(data[data_types == l, ])
+            }
+            )
+            names(x = data) <- lvls
+        } else{
+            data <- list(data)
+        }
+        full.data[[length(x = full.data) + 1]] <- data
+    }
+    # Combine all the data from different directories into one big matrix, note this
+    # assumes that all data directories essentially have the same features files
+    list_of_data <- list()
+    for (j in 1:length(x = full.data[[1]])) {
+        list_of_data[[j]] <- do.call(cbind, lapply(X = full.data, FUN = `[[`, j))
+        # Fix for Issue #913
+        list_of_data[[j]] <- as(object = list_of_data[[j]], Class = "dgCMatrix")
+    }
+    names(x = list_of_data) <- names(x = full.data[[1]])
+    # If multiple features, will return a list, otherwise
+    # a matrix.
+    if (length(x = list_of_data) == 1) {
+        return(list_of_data[[1]])
+    } else {
+        return(list_of_data)
+    }
+}
+
+
 RenameIdent.1 <- function (object, new.ident.name, cells.use) 
 {
     new.levels <- old.levels <- levels(x = object@ident)
@@ -1316,13 +1691,15 @@ PrepareGSEA <- function(object, k = 1, do.return = FALSE, continuous.label = NUL
         GSEA_expr <- merge(genesV2,GSEA_expr,by = "gene")
         GSEA_expr = GSEA_expr[,-1]
     }
-
+    file.name = paste(unique(object@ident), collapse = "_")
+    if(!is.null(continuous.label)) file.name <- paste(continuous.label,collapse = "_")
     path <- paste0("output/",gsub("-","",Sys.Date()),"/")
     if(!dir.exists(path)) dir.create(path, recursive = T)
-    write.table(GSEA_expr, file = paste0(path, ident,k,".txt"),
+    write.table(GSEA_expr, file = paste0(path, file.name,
+                                         "_",k,".txt"),
                 sep = "\t", quote = FALSE,row.names = FALSE)
     
-    fn = paste0(path, ident,k,".cls")
+    fn = paste0(path, file.name,"_",k,".cls")
     if (file.exists(fn)) file.remove(fn)
     lapply(cls_list, cat, "\n", file=fn,append=TRUE)
     
@@ -1330,6 +1707,34 @@ PrepareGSEA <- function(object, k = 1, do.return = FALSE, continuous.label = NUL
     
 }
 
+
+# Run GSEA and generate reports
+#'@example ReportGSEA(file = "c5.all.827-D14.827-D16.827-D28.827-D0.Gsea.1552707417126",pos=T,ncol=3)
+ReportGSEA <- function(file, pos=T,ncol = 3){
+        (gsea_path <- paste("~/gsea_home/output",tolower(format(Sys.Date(), "%b%d")),
+                            file,sep ='/'))
+        #(pos.xls.path <- list.files(gsea_path,pattern="gsea_report_for_.*pos.*xls"))
+        p<-1; if(pos) p <-2
+        (pos.xls.path <- list.files(gsea_path,pattern="gsea_report_for_.*xls"))
+        GSEA_output <- readr::read_delim(paste0(gsea_path,"/",pos.xls.path[p]),"\t", 
+                                         escape_double = FALSE, trim_ws = TRUE)
+        print(GSEA_output %>% .[-c(2,3,12)] %>% head(50) %>% kable() %>% kable_styling())
+        
+        (GSEA.plots <- sapply(GSEA_output$NAME[1:9], function(name) {
+                paste0("enplot_",name, "_([0-9]+)*\\.png$")}) %>%
+                        sapply(function(x) list.files(path = gsea_path, pattern =x)) %>%
+                        .[sapply(.,length)>0] %>% #Remove empty elements from list with character(0)
+                        paste(gsea_path, ., sep = "/")) 
+        CombPngs(GSEA.plots, ncol = ncol)
+        path <- paste0("output/",gsub("-","",Sys.Date()),"/")
+        if(!dir.exists(path)) dir.create(path, recursive = T)
+        GSEA_path <- paste0(path, "GSEA_xls")
+        if(!dir.exists(GSEA_path)) dir.create(GSEA_path, recursive = T)
+        file.copy(paste0(gsea_path,"/",pos.xls.path),GSEA_path)
+        file.rename(paste0(path,list.files(path,pattern=paste0("GSEA.plots_CombPngs"))), 
+                    paste0(path,file,"-",p,".jpeg"))
+        
+}
 
 # scale with median, not mean
 .scale <- function(df, fun1 = sd, fun2 = median){
@@ -1481,11 +1886,11 @@ SetAllIdent.1 <- function (object, id = NULL)
 # modified SingleFeaturePlot, take seurat object and return ggplot
 SingleFeaturePlot.1 <- function (object = object, feature = feature, pt.size = 1.0,
                                  dim.1 = 1, dim.2 = 2,pch.use = 16, cols.use  = c("lightgrey","blue"),
-                                 gradient.use = c("orangered", "red4"),threshold= NULL,text.size=15,
+                                 gradient.use = c("orangered", "red4"),threshold= NA,text.size=15,
                                  cells.use = NULL,dim.codes, min.cutoff = 0, max.cutoff = Inf,
-                                 use.imputed = FALSE, reduction.use = "tsne",no.axes = FALSE, no.legend = TRUE, 
-                                 dark.theme = FALSE,title="", do.return = FALSE,x.lim = NULL,
-                                 y.lim = NULL, ...) 
+                                 use.imputed = FALSE, reduction.use = "tsne",no.axes = FALSE, no.legend = T, 
+                                 dark.theme = FALSE,title=feature, do.return = TRUE,do.print=FALSE,x.lim = NULL,
+                                 y.lim = NULL,legend.title = "log(UMI)", ...) 
 {
     dim.code <- GetDimReduction(object = object, reduction.type = reduction.use, 
                                 slot = "key")
@@ -1569,18 +1974,32 @@ SingleFeaturePlot.1 <- function (object = object, feature = feature, pt.size = 1
     if (dark.theme) {
         p <- p + DarkTheme()
     }
-    p$data <- p$data[order(p$data$gene),]
-    p1 <- ChangeColorScale(p, alpha.use = 1,
+    if(is.null(threshold)) {
+        x = object@data[feature,]
+        threshold <- histPeak(x)
+    }
+    p1 <- ChangeColorScale(p, alpha.use = 1,legend.title=legend.title,
                            scaled.expression.threshold = threshold,
                            gradient.use = gradient.use)
     if(!is.null(x.lim)) p1 = p1 + xlim(x.lim)
     if(!is.null(y.lim)) p1 = p1 + ylim(y.lim)
-    p1 <- p1 +ggtitle(paste0(title,"\n",feature))+
-        theme(text = element_text(size=text.size),     #larger text including legend title							
+    p1 <- p1 +ggtitle(paste0(title))+
+        theme(text = element_text(size=text.size),						
               axis.text.x = element_text(size=text.size*0.8),
               axis.text.y = element_text(size=text.size*0.8),
-              plot.title = element_text(hjust = 0.5,size=text.size*1.5)) #title in middle
-    return(p1)
+              plot.title = element_text(hjust = 0.5,size=text.size*1.5),
+              legend.key.size = unit(text.size/4, "mm"),
+              legend.key.width = unit(text.size/4, "mm"),
+              legend.key.height = unit(text.size/4, "mm"))
+    if(do.print) {
+      path <- paste0("output/",gsub("-","",Sys.Date()),"/")
+      if(!dir.exists(path)) dir.create(path, recursive = T)
+      jpeg(paste0(path,"SingleFeaturePlot_",feature,".jpeg"), units="in", width=10, height=7,res=600)
+      print(p1)
+      dev.off()
+    } else if(do.return) {
+      return(p1)
+    }
 }
 
 
@@ -1594,7 +2013,7 @@ SplitCells <- function(object = object, split.by = "orig.ident"){
     
     cell.all <- FetchData(object = object, vars.all = split.by)
     if(class(cell.all[,1]) == "numeric"){
-        Levels = paste(c("Express no","Express"), split.by)
+        cell.subsets <- list()
         cell.subsets[[1]] <- rownames(cell.all)[cell.all[,split.by] == 0]
         cell.subsets[[2]] <- rownames(cell.all)[cell.all[,split.by] > 0]
     }
@@ -1605,6 +2024,42 @@ SplitCells <- function(object = object, split.by = "orig.ident"){
             rownames(cell.all)[cell.all[,split.by] == x])
     }
     return(cell.subsets)
+}
+
+
+#' Split Seurat by certein criteria and make tsne plot
+#' @param object Seurat object
+#' @param split.by the criteria to split, can be gene name, or any variable in meta.data
+#' @param select.plots output order, default to NULL. If want to change,use c(2,1) for example
+#' @param return.data TRUE/FASLE, return splited ojbect or not.
+#' @param ... all other parameters are inherited from Seurat::TSNEPlot()
+#' @export p ggplot object from TSNEplot
+#' @example SplitDimPlot(mouse_eyes, split.by = "orig.ident")
+#' @example SplitDimPlot(mouse_eyes, split.by = "orig.ident", select.plots = c(2,1))
+SplitDimPlot <- function(object = object, split.by = "orig.ident",
+                         reduction.use= "TSNE",
+                         select.plots = NULL, return.plots = FALSE,
+                         do.label = T, group.by = "ident", no.legend = TRUE,
+                         pt.size = 1,label.size = 5,... ){
+        
+        subset.object <- SplitSeurat(object = object, split.by = split.by)
+        levels <- object@meta.data[,split.by] %>% unique %>% sort
+        
+        p <- list()
+        if(is.null(select.plots)) select.plots <- 1:length(subset.object)
+        for(i in 1:length(select.plots)){
+                p[[i]] <- DimPlot.1(object = subset.object[[select.plots[i]]],
+                                    reduction.use = reduction.use,
+                                    colors.use = ExtractMetaColor(subset.object[[select.plots[i]]]),
+                                    do.label = do.label, group.by = group.by,
+                                    do.return = T, no.legend = no.legend,
+                                    pt.size = pt.size,label.size = label.size,...)+
+                        ggtitle(levels[select.plots[i]])+
+                        theme(text = element_text(size=20),     #larger text including legend title
+                              plot.title = element_text(hjust = 0.5)) #title in middle
+        }
+        p <- p[lapply(p,length)>0] # remove NULL element
+        if(return.plots) return(p) else print(do.call(cowplot::plot_grid, p))
 }
 
 
@@ -1627,7 +2082,9 @@ SplitSeurat <- function(object = object, split.by = "orig.ident",
     for(i in 1:length(select.seurat)){
         subset.object[[i]] <- SubsetData(object, cells.use =cell.subsets[[select.seurat[i]]])
     }
-    names(subset.object) <- object@meta.data[,split.by] %>% unique %>% sort
+    if(class(FetchData(object = object, vars.all = split.by)[1]) == "numeric"){
+            names(subset.object) =c("No","Yes")
+            } else names(subset.object) <- sort(unique(object@meta.data[,split.by]))
     return(subset.object)
 }
 
@@ -1672,45 +2129,11 @@ SplitTSNEPlot <- function(object, split.by = "orig.ident",select.plots = NULL,
                     FindIdentLabel(object),".jpeg"), units="in", width=10, height=7,res=600)
         print(do.call(cowplot::plot_grid, p))
         dev.off()
+    } else if(do.return) {
+            return(p)
     }
-    if(do.return) return(p)
 }
 
-
-
-#' Split Seurat by certein criteria and make tsne plot
-#' @param object Seurat object
-#' @param split.by the criteria to split, can be gene name, or any variable in meta.data
-#' @param select.plots output order, default to NULL. If want to change,use c(2,1) for example
-#' @param return.data TRUE/FASLE, return splited ojbect or not.
-#' @param ... all other parameters are inherited from Seurat::TSNEPlot()
-#' @export p ggplot object from TSNEplot
-#' @example SplitDimPlot(mouse_eyes, split.by = "orig.ident")
-#' @example SplitDimPlot(mouse_eyes, split.by = "orig.ident", select.plots = c(2,1))
-SplitDimPlot <- function(object = object, split.by = "orig.ident",
-                         reduction.use= "TSNE",
-                          select.plots = NULL, return.plots = FALSE,
-                          do.label = T, group.by = "ident", no.legend = TRUE,
-                          pt.size = 1,label.size = 5,... ){
-    
-    subset.object <- SplitSeurat(object = object, split.by = split.by)
-    levels <- object@meta.data[,split.by] %>% unique %>% sort
-    
-    p <- list()
-    if(is.null(select.plots)) select.plots <- 1:length(subset.object)
-    for(i in 1:length(select.plots)){
-        p[[i]] <- DimPlot.1(object = subset.object[[select.plots[i]]],
-                             reduction.use = reduction.use,
-                             do.label = do.label, group.by = group.by,
-                             do.return = T, no.legend = no.legend,
-                             pt.size = pt.size,label.size = label.size,...)+
-            ggtitle(levels[select.plots[i]])+
-            theme(text = element_text(size=20),     #larger text including legend title
-                  plot.title = element_text(hjust = 0.5)) #title in middle
-    }
-    p <- p[lapply(p,length)>0] # remove NULL element
-    if(return.plots) return(p) else print(do.call(cowplot::plot_grid, p))
-}
 
 # find and print differentially expressed genes within all major cell types
 # combine SubsetData, FindAllMarkers, write.csv
@@ -1754,7 +2177,7 @@ SplitFindAllMarkers <- function(object, split.by = "orig.ident",test.use = "bimo
 #               threshold = 0.1)
 SplitSingleFeaturePlot<- function(object, split.by = "orig.ident",select.plots = NULL, 
                                   markers, alias = NULL, do.return = TRUE, do.print = TRUE,
-                                  do.label = T, group.by = "ident", threshold= NULL,
+                                  do.label = T, group.by = "ident", threshold= NA,
                                   pt.size = 1,label.size = 5,size=20,nrow = NULL,
                                   ncol = NULL, x.lim = NULL, y.lim = NULL,...){
     
@@ -1770,6 +2193,12 @@ SplitSingleFeaturePlot<- function(object, split.by = "orig.ident",select.plots =
                 new.threshold <- histPeak(x)
                 message(paste0("threshold for ",marker,":", new.threshold))
         } else new.threshold = threshold
+        
+        if(!is.null(alias)) {
+                marker.alias = Alias(alias, marker)
+                } else marker.alias = NULL
+        
+        
         for(i in 1:length(select.plots)){
                 g[[i]] <- SingleFeaturePlot.1(object = subset.object[[select.plots[i]]],
                                           threshold= new.threshold,
@@ -1777,17 +2206,17 @@ SplitSingleFeaturePlot<- function(object, split.by = "orig.ident",select.plots =
                                           title = paste0(levels[select.plots[i]]),
                                           x.lim = x.lim, y.lim = y.lim,...)
                 }
-        g <- g[lapply(g,length)>0] # remove NULL element
+        g <- g[lapply(g ,length)>0] # remove NULL element
         if(do.print) {
             path <- paste0("./output/",gsub("-","",Sys.Date()),"/")
             if(!dir.exists(path)) dir.create(path, recursive = T)
-            jpeg(paste0(path,"SplitSingleFeaturePlot_",levels[select.plots[i]],
-                        "_",marker,".jpeg"), units="in", width=10, height=7,res=600)
+            jpeg(paste0(path,"Split_",paste(levels,collapse = "_"),
+                        "_",marker,"_",new.threshold,".jpeg"), units="in", width=10, height=7,res=600)
             print(do.call(cowplot::plot_grid, c(g, align = "hv",
                                                 nrow = nrow, ncol = ncol))+
-                            ggtitle(paste0(marker,alias))+
-                            theme(plot.title = element_text(hjust = 0.5,size = 15, 
-                                                            face = "bold")))
+                            ggtitle(paste0(marker, marker.alias))+
+                            theme(plot.title = element_text(hjust = 0.5,size = 25, 
+                                                            face = "plain")))
             print(paste0(which(markers == marker),":",length(markers)))
             dev.off()
         }
@@ -1801,6 +2230,10 @@ histPeak <- function(vector){
         y <- hist(vector)
         df <- data.frame("counts" = y$counts, "breaks" = y$breaks[-length(y$breaks)])
         local.max = df$breaks[(which(diff(sign(diff(df$counts)))==-2))[1]] # local.max
+        if(is.na(local.max)) {
+                none_zeor_counts <- (df$counts[(df$breaks != 0)])
+                local.max = df$breaks[which(none_zeor_counts == max(none_zeor_counts))[1]]
+        }
         return(local.max)
 }
 
@@ -2180,12 +2613,13 @@ Types2Markers <- function(df, by = "Cell_Type"){
 
 TSNEPlot.1 <- function(object, do.label = FALSE, pt.size = 1, label.size = 4, 
                        cells.use = NULL, colors.use = NULL, alpha =1,no.legend = TRUE,
-                       text.repel = FALSE, label.repel = TRUE,force= 1,...) 
+                       text.repel = FALSE, label.repel = TRUE,force= 1,do.print=F,...)
 {
     return(DimPlot.1(object = object, reduction.use = "tsne", no.legend = no.legend,
                      cells.use = cells.use, pt.size = pt.size, do.label = do.label, 
                      label.size = label.size, cols.use = colors.use,alpha = alpha,
-                     text.repel = text.repel, label.repel = label.repel,force= force,...))
+                     text.repel = text.repel, label.repel = label.repel,force= force,
+                     do.print=do.print,...))
 }
 
 #' Generate 3D TSNEplot
