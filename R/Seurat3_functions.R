@@ -5,6 +5,8 @@ library(ggplot2)
 library(ggpubr)
 library(ggsci)
 library(gplots)
+library(Matrix)
+library(qlcMatrix)
 # Set a default value if an object is nullf
 #
 # @param lhs An object to set if it's null
@@ -85,7 +87,7 @@ library(gplots)
 #' @object seurat object
 #' @label colname in metadata
 #' @colors vector of hex colors
-# MCL <- AddMetaColor(object = MCL, label= "singler1sub", colors = singler_colors)
+# MCL <- AddMetaColor(object = MCL, label= "singler1sub", colors = Singler.colors)
 AddMetaColor<- function(object, label = NULL, colors = NULL){
     
     if(is.null(label)) label <- FindIdentLabel(object)
@@ -471,17 +473,18 @@ df2list <- function(df){
 
 #' DoHeatmap.1, automatically group top DE genes from FindMakers output
 #' @param group.colors hex color character vector matching to group.by
+#' @param colors hex color character vector for heatmap
 #example   DoHeatmap.1(SSCs,top,Top_n = 15, 
 #                   group.order = major_cells,ident.use = "all cell types",
 #                   group.label.rot = T,cex.row = 5,remove.key =T)
 #
 DoHeatmap.1 <- function(object, marker_df,features = NULL, cells = NULL, 
                         no.legend =F,unique.name= T, Top_n = 10, group.by = "ident", 
-                         group.bar = TRUE, group.colors = NULL, disp.min = -2.5, disp.max = NULL, slot = "scale.data", 
-                         assay = NULL, label = TRUE, cols=NULL, size = 5.5, hjust = 0, angle = 45, 
+                         group.bar = TRUE, group.colors = NULL, colors=NULL, disp.min = -2.5, disp.max = NULL, slot = "scale.data", 
+                         assay = NULL, label = TRUE, size = 5.5, hjust = 0, angle = 45, 
                          raster = TRUE, draw.lines = TRUE, lines.width = NULL, group.bar.height = 0.02, 
                          combine = TRUE,title = "",title.size = 14,do.print = FALSE,
-                        pal_gsea = TRUE,position = "right",save.path = NULL,
+                        position = "right",save.path = NULL,
                         cex.row=12,legend.size = NULL,units="in", width=10, height=7,res=600,...){
     v <- UniqueName(object = object, fileName = deparse(substitute(object)), unique.name = unique.name)
     v = paste0(v,"_",FindIdentLabel(object))
@@ -504,7 +507,8 @@ DoHeatmap.1 <- function(object, marker_df,features = NULL, cells = NULL,
                          lines.width = lines.width, group.bar.height = group.bar.height, 
                          combine = combine)+
         scale_y_discrete(position = position)
-    if(pal_gsea) heatmap = heatmap + scale_fill_gradientn(colors = ggsci::pal_gsea()(12))
+    #if(pal_gsea) heatmap = heatmap + scale_fill_gradientn(colors = ggsci::pal_gsea()(12))
+    if(!is.null(colors)) heatmap = heatmap + scale_fill_gradientn(colors = colors)
     if(!is.null(title)) {
         heatmap = heatmap+ ggtitle(title)+ 
             theme(plot.title = element_text(size=title.size, hjust = 0.5,face="plain"))
@@ -530,11 +534,12 @@ DoHeatmap.1 <- function(object, marker_df,features = NULL, cells = NULL,
 #' @param data.use expression data.frame
 #' @param group.by factor/character vector of column group labels
 #' @param group.colors hex color character vector matching to group.by
+#' @param colors hex color character vector for heatmap
 #' @param save.path folder to save
 DoHeatmap.matrix <- function (data.use, features = NULL, cells = NULL, 
                               no.legend =F, group.by = "ident", group.bar = TRUE, 
                               group.colors = NULL,disp.min = -2.5, disp.max = NULL, slot = "scale.data", 
-                              assay = NULL, label = TRUE, cols=NULL, size = 5.5, hjust = 0, angle = 45, 
+                              assay = NULL, label = TRUE, colors = NULL, size = 5.5, hjust = 0, angle = 45, 
                               raster = TRUE, draw.lines = TRUE, lines.width = NULL, group.bar.height = 0.02, 
                               combine = TRUE,title = "",title.size = 14,do.print = FALSE,
                               pal_gsea = TRUE,position = "right",save.path = NULL,
@@ -659,7 +664,8 @@ DoHeatmap.matrix <- function (data.use, features = NULL, cells = NULL,
         plots <- patchwork::wrap_plots(plots)
     }
     plots = plots + scale_y_discrete(position = position)
-    if(pal_gsea) plots = plots + scale_fill_gradientn(colors = ggsci::pal_gsea()(12))
+    #if(pal_gsea) plots = plots + scale_fill_gradientn(colors = ggsci::pal_gsea()(12))
+    if(!is.null(colors)) plots = plots + scale_fill_gradientn(colors = colors)
     if(!is.null(title)) {
         plots = plots+ ggtitle(title)+ 
             theme(plot.title = element_text(size=title.size, hjust = 0.5,face="plain"))
@@ -674,7 +680,7 @@ DoHeatmap.matrix <- function (data.use, features = NULL, cells = NULL,
     if(do.print){
         if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
         #if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-        jpeg(paste0(save.path,"Heatmap_",title,".jpeg"),
+        jpeg(paste0(save.path,".jpeg"),
              units=units, width=width, height=height,res=res)
         print(plots)
         dev.off()
@@ -779,28 +785,29 @@ ExtractMetaColor <- function(object, group.by = NULL){
 #' @param do.return TRUE/FALSE return plot
 #' @param return.raw TRUE/FALSE return pos.share_genes list
 #' @param do.print print figures
-#' @param save.path folder to save
+#' @param save.path path to save
 #' @export g plot object
-#' @export pos.share_genes positive shared gene list
+#' @export pos_genes positive shared gene list
 #' @example eulerr(T_cells_markers,shape =  "ellipse",cut_off = "avg_logFC", cut_off_value = 0.01)
-eulerr <- function(df, shape =  "circle", key = NULL, cut_off = "avg_logFC",
-                   cut_off_value = 0.05, do.lenged = TRUE,do.return = TRUE, return.raw = FALSE,
-                   do.print = FALSE,save.path = NULL, ...){
+eulerr <- function(df, key = NULL, cut_off = "avg_logFC",cut_off_value = 0.05, 
+                   do.lenged = TRUE,do.return = TRUE, return.raw = FALSE,
+                   do.print = FALSE,save.path = NULL,
+                   shape = c("circle", "ellipse"),...){
         df$cluster <- as.vector(df$cluster)
         df$gene <- as.vector(df$gene)
         if(!is.null(key)) df <- df[(df$cluster %in% key),]
         df_list <- split(df,df$cluster)
         
         if(cut_off == "avg_logFC"){
-                pos.share_genes <- sapply(df_list, function(df) df[(df$avg_logFC > -cut_off_value),"gene"])
+            pos_genes <- sapply(df_list, function(df) df[(df$avg_logFC > -cut_off_value),"gene"])
         }  
         if(any(cut_off %in% c("p_val","p_val_adj"))){
-                pos_genes <- lapply(df_list, function(df) df[(df$avg_logFC > 0),"gene"])
+                pos_genes1 <- lapply(df_list, function(df) df[(df$avg_logFC > 0),"gene"])
                 shared_genes <- lapply(df_list, function(df) df[(abs(df[,cut_off]) > cut_off_value),"gene"])
-                pos.share_genes <- mapply(function(x,y) unique(c(x,y)), pos_genes, shared_genes)
+                pos_genes <- mapply(function(x,y) unique(c(x,y)), pos_genes1, shared_genes)
         }
-        if(return.raw) return(pos.share_genes)
-        euler_df <- eulerr::euler(pos.share_genes,shape = shape,...)
+        if(return.raw) return(pos_genes)
+        euler_df <- eulerr::euler(pos_genes,shape = shape,...)
         
         g <- plot(euler_df, quantities = TRUE, lty = 1:6,
                   legend = do.lenged, main = paste(cut_off," : ",cut_off_value))
@@ -1905,7 +1912,7 @@ LabelRepel <- function(plot, id, clusters = NULL, labels = NULL, split.by = NULL
 #Make rownamess with duplicated values unique in a dataframe
 #'@param object Seurat object or expresion matrix
 #'@param features genes to be added in scale.datas
-MakeUniqueGenes <- function(object, features){
+MakeUniqueGenes <- function(object, features, verbose = T){
     if(class(object) == "Seurat") assay = DefaultAssay(object)
     featuresNum <- make.unique(features, sep = ".")
     dupFeatures <- duplicated(features)
@@ -1923,7 +1930,7 @@ MakeUniqueGenes <- function(object, features){
     } else stop("expression profile must be provided")
 
     for (i in 1:length(dupFeaturesIndex)){
-        svMisc::progress(i/length(dupFeaturesIndex)*100)
+        if(verbose) svMisc::progress(i/length(dupFeaturesIndex)*100)
         scale.data <- rbind(scale.data, 
                             "dupGene" = scale.data[features[dupFeaturesIndex[i]], ])
         rownames(scale.data)[nrow(scale.data)] = featuresNum[dupFeaturesIndex[i]]
@@ -2253,10 +2260,10 @@ ReportGSEA <- function(file, pos=T,ncol = 3){
 
 
 # draw rectangle by four corner coordinates
-#' @param x_left,x_right,y_top,y_bottom coordinate values anti-clockwise from left bottom
+#' @param x_left,x_right,y_bottom,y_top, coordinate values anti-clockwise from left bottom
 #' @param ... argments pass to geom_segment
 #' @example rectangle(-4.6, -4.1, -4.7, -5.5,colour = "blue")
-rectangle <- function(x_left, x_right, y_top, y_bottom,...){
+rectangle <- function(x_left, x_right, y_bottom, y_top, ...){
     list(geom_segment(aes(x = x_left, xend = x_right, y = y_top, yend = y_top),...),
     geom_segment(aes(x = x_right, xend = x_right, y = y_top, yend = y_bottom),...),
     geom_segment(aes(x = x_left, xend = x_right, y = y_bottom, yend = y_bottom),...),
@@ -2485,6 +2492,64 @@ PCAPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size = 
     if(do.return & Sys.info()[['sysname']] != "Linux") return(plots)
 }
 
+
+
+#' prepare exp and tsne file
+PrepareShiny <- function(object, samples, Rshiny_path, split.by = "orig.ident",reduction = "tsne",
+                         verbose = F,scale =NULL, assay = NULL){
+    if(missing(object) | class(object) != "Seurat") stop("samples is not provided")
+    if(missing(samples)) stop("samples is not provided")
+    if(missing(Rshiny_path)) stop("Rshiny_path is not provided")
+    assay = DefaultAssay(object) %||% assay
+    Idents(object) <-  split.by
+    avaible_samples <- samples %in% c("All_samples",object@meta.data[,split.by])
+    if (!all(avaible_samples))
+        stop(paste(paste(samples[!avaible_samples],collapse = " "),
+                   "are not exist in the data."))
+    max_exp <- list()
+    if("All_samples" %in% samples) {
+        single_object <- object
+    } else single_object <- subset(object, idents = samples)
+    max_exp = rowMax(single_object[[assay]]@data) %>% as.vector()
+    max_exp = max_exp/log(2)
+    names(max_exp) = rownames(single_object)
+    
+    exp <- list()
+    tsne <- list()
+    for (i in seq_along(samples)){
+        sample <- samples[i]
+        if(sample == "All_samples") {
+            single_object <- object
+        } else single_object <- subset(object, idents = sample)
+        #============== exp csv===============
+        data <- GetAssayData(single_object)
+        data <- as(data, "sparseMatrix")
+        data = data/log(2)
+        #bad <- rowMax(data) == 0
+        #data = data[!bad,]
+        if(!is.null(scale)){
+            range <- rowMax(data) - rowMin(data) # range <- apply(data,1,max) - apply(data,1,min)
+            data = sweep(data, 1, range,"/")*scale
+        }
+        
+        if(verbose) {
+            print(sample)
+            print(format(object.size(data),units="MB"))
+        }
+        exp[[i]] = data
+        #============== tsne csv===============
+        tsne[[i]] = Embeddings(single_object, reduction = reduction)
+        
+        svMisc::progress(i/length(samples)*100)
+    }
+    names(exp) = samples
+    names(tsne) = samples
+    shiny_data_path <- paste0(Rshiny_path, "data/")
+    if(!dir.exists(shiny_data_path)) dir.create(shiny_data_path, recursive = T)
+    save(exp,tsne,max_exp, file = paste0(shiny_data_path,basename(Rshiny_path),".Rda"))
+}
+
+
 TitleCenter <- function(size = 15, hjust = 0.5){
     theme(text = element_text(size=size),
           plot.title = element_text(hjust = hjust))
@@ -2609,7 +2674,7 @@ TSNEPlot.1 <- function(object,dims = c(1, 2),cells = NULL, cols = NULL, pt.size 
 # VolcanoPlots to demonstrate Differential expressed genes
 # https://zhuanlan.zhihu.com/p/82785739?utm_source=ZHShareTargetIDMore&utm_medium=social&utm_oi=642996063045423104
 VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value = 0.05, cut_off_logFC = 0.25,top = 15,
-                         cols = c("#0000ff","#d2dae2","#ff0000"),alpha=0.8, size=2,
+                         sort.by = "p_val_adj",cols = c("#2a71b2","#d2dae2","#ba2832"),alpha=0.8, size=2,
                          legend.size = 12) {
     #data = data[data[,"p_val_adj"] < 1,]
     #data = data[data[,cut_off[1]] < cut_off_value,]
@@ -2622,8 +2687,14 @@ VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value =
     # 将需要标记的基因放置在单独的数组
     Up <- data[data$change %in% "Upregulated",]
     Down <- data[data$change %in% "Downregulated",]
-    Up_gene_index <- rownames(Up)[Up[,cut_off[1]] <= head(sort(Up[,cut_off[1]],decreasing = F),top) %>% tail(1)]
-    Down_gene_index <- rownames(Down)[Down[,cut_off[1]] <= head(sort(Down[,cut_off[1]],decreasing = F),top) %>% tail(1)]
+    if(sort.by == "p_val_adj") {
+        Up_gene_index <- rownames(Up)[Up[,sort.by] <= tail(head(sort(Up[,sort.by],decreasing = F),top),1)]
+        Down_gene_index <- rownames(Down)[Down[,sort.by] <= tail(head(sort(Down[,sort.by],decreasing = F),top),1)]
+    }
+    if(sort.by == "avg_logFC") {
+        Up_gene_index <- rownames(Up)[Up[,sort.by] >= tail(head(sort(Up[,sort.by],decreasing = T),top),1)]
+        Down_gene_index <- rownames(Down)[Down[,sort.by] <= tail(head(sort(Down[,sort.by],decreasing = F),top),1)]
+    }
     p<-ggplot(
         #设置数据
         data, 
@@ -2789,7 +2860,10 @@ Singler.colors <- c("#7FC97F","#BEAED4","#FDC086","#386CB0","#F0027F",
                     "#B3E2CD","#FDCDAC","#CBD5E8","#F4CAE4","#E6F5C9",
                     "#FFF2AE","#F1E2CC","#CCCCCC","#8DD3C7","#FFFFB3",
                     "#FCCDE5","#D9D9D9","#FFED6F")
-
+sns.RdBu_r = c('#2a71b2', '#6bacd1', '#c2ddec', '#f7f6f6', '#fbccb4', '#e48066', '#ba2832')
+# maturation score colors
+my.cols.RYG <- colorRampPalette(c("#a50026", "#d73027", "#f46d43", "#fdae61", "#fee08b",
+"#ffffbf", "#d9ef8b", "#a6d96a", "#66bd63", "#1a9850", "#006837"))(11)
 
 #' produce unique string baes on Seurat object's meta data
 UniqueName <- function(object, fileName = NULL, unique.name = T){
@@ -2804,6 +2878,14 @@ UniqueName <- function(object, fileName = NULL, unique.name = T){
     return(fileName)
 }
 
-# maturation score colors
-my.cols.RYG <- colorRampPalette(c("#a50026", "#d73027", "#f46d43", "#fdae61", "#fee08b",
-                                  "#ffffbf", "#d9ef8b", "#a6d96a", "#66bd63", "#1a9850", "#006837"))(11)
+# unlist and use.names without additional index in the names
+Unlist <- function(List){
+    for(i in seq_along(List)){
+        names(List[[i]]) = rep(names(List)[i],length(List[[i]]))
+    }
+    flatten_List <- base::unlist(List,use.names=TRUE)
+    names(flatten_List) %<>% gsub("\\..*","",.)
+    return(flatten_List)
+}
+
+
