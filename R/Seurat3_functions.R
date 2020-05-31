@@ -757,7 +757,7 @@ ExtractMetaColor <- function(object, group.by = NULL){
     group.by <- group.by %||% FindIdentLabel(object)
     color_index <- paste0(group.by ,".colors")
     if(!any(color_index %in% colnames(meta.data))) {
-        return(gg_color_hue(length(levels(object@meta.data[,group.by]))))
+        return(gg_color_hue(length(unique(as.character(object@meta.data[,group.by])))))
         } else {
             label = sub("colors","",color_index)
             label = sub("[.]$","",label)
@@ -806,7 +806,6 @@ eulerr <- function(df, key = NULL, cut_off = "avg_logFC",cut_off_value = 0.05,
                 shared_genes <- lapply(df_list, function(df) df[(abs(df[,cut_off]) > cut_off_value),"gene"])
                 pos_genes <- mapply(function(x,y) unique(c(x,y)), pos_genes1, shared_genes)
         }
-        if(return.raw) return(pos_genes)
         euler_df <- eulerr::euler(pos_genes,shape = shape,...)
         
         g <- plot(euler_df, quantities = TRUE, lty = 1:6,
@@ -819,6 +818,7 @@ eulerr <- function(df, key = NULL, cut_off = "avg_logFC",cut_off_value = 0.05,
             print(g)
             dev.off()
         }
+        if(return.raw) return(pos_genes)
         if(do.return & Sys.info()[['sysname']] != "Linux") return(g)
         
 }
@@ -2860,11 +2860,39 @@ Singler.colors <- c("#7FC97F","#BEAED4","#FDC086","#386CB0","#F0027F",
                     "#B3E2CD","#FDCDAC","#CBD5E8","#F4CAE4","#E6F5C9",
                     "#FFF2AE","#F1E2CC","#CCCCCC","#8DD3C7","#FFFFB3",
                     "#FCCDE5","#D9D9D9","#FFED6F")
-sns.RdBu_r = c('#2a71b2', '#6bacd1', '#c2ddec', '#f7f6f6', '#fbccb4', '#e48066', '#ba2832')
+sns.RdBu_r_199 = c('#063264', '#073467', '#08366a', '#0a3b70', '#0c3d73', '#0d3f76', '#0e4179',
+               '#10457e', '#114781', '#124984', '#144e8a', '#15508d', '#175290', '#185493',
+               '#1a5899', '#1b5a9c', '#1c5c9f', '#1e61a5', '#1f63a8', '#2065ab', '#2267ac',
+               '#246aae', '#266caf', '#276eb0', '#2a71b2', '#2b73b3', '#2c75b4', '#2e77b5',
+               '#307ab6', '#327cb7', '#337eb8', '#3480b9', '#3783bb', '#3885bc', '#3a87bd',
+               '#3c8abe', '#3e8cbf', '#3f8ec0', '#408fc1', '#4393c3', '#4695c4', '#4997c5', 
+               '#4f9bc7', '#529dc8', '#569fc9', '#59a1ca', '#5fa5cd', '#62a7ce', '#65a9cf',
+               '#6bacd1', '#6eaed2', '#71b0d3', '#75b2d4', '#7bb6d6', '#7eb8d7', '#81bad8',
+               '#84bcd9', '#8ac0db', '#8dc2dc', '#90c4dd', '#96c7df', '#98c8e0', '#9bc9e0',
+               '#9dcbe1', '#a2cde3', '#a5cee3', '#a7d0e4', '#acd2e5', '#aed3e6', '#b1d5e7',
+               '#b3d6e8', '#b8d8e9', '#bbdaea', '#bddbea', '#c2ddec', '#c5dfec', '#c7e0ed',
+               '#cae1ee', '#cfe4ef', '#d1e5f0', '#d2e6f0', '#d4e6f1', '#d7e8f1', '#d8e9f1',
+               '#dae9f2', '#ddebf2', '#deebf2', '#e0ecf3', '#e1edf3', '#e4eef4', '#e6eff4',
+               '#e7f0f4', '#eaf1f5', '#ecf2f5', '#edf2f5', '#eff3f5', '#f2f5f6', '#f3f5f6',
+               '#f5f6f7', '#f7f6f6', '#f7f5f4', '#f8f4f2', '#f8f3f0', '#f8f1ed', '#f9f0eb',
+               '#f9efe9', '#f9eee7', '#f9ebe3', '#faeae1', '#fae9df', '#fae7dc', '#fbe6da',
+               '#fbe5d8', '#fbe4d6', '#fce2d2', '#fce0d0', '#fcdfcf', '#fdddcb', '#fddcc9',
+               '#fddbc7', '#fdd9c4', '#fcd5bf', '#fcd3bc', '#fbd0b9', '#fbccb4', '#facab1',
+               '#fac8af', '#f9c6ac', '#f9c2a7', '#f8bfa4', '#f8bda1', '#f8bb9e', '#f7b799',
+               '#f7b596', '#f6b394', '#f6af8e', '#f5ac8b', '#f5aa89', '#f5a886', '#f3a481',
+               '#f2a17f', '#f19e7d', '#ef9979', '#ee9677', '#ec9374', '#eb9172', '#e98b6e',
+               '#e8896c', '#e6866a', '#e48066', '#e37e64', '#e27b62', '#e17860', '#de735c',
+               '#dd7059', '#dc6e57', '#db6b55', '#d86551', '#d7634f', '#d6604d', '#d35a4a',
+               '#d25849', '#d05548', '#cf5246', '#cc4c44', '#cb4942', '#c94741', '#c6413e',
+               '#c53e3d', '#c43b3c', '#c2383a', '#bf3338', '#be3036', '#bd2d35', '#ba2832',
+               '#b82531', '#b72230', '#b61f2e', '#b3192c', '#b1182b', '#ae172a', '#ab162a',
+               '#a51429', '#a21328', '#9f1228', '#991027', '#960f27', '#930e26', '#900d26',
+               '#8a0b25', '#870a24', '#840924', '#7f0823', '#7c0722', '#790622', '#760521',
+               '#700320', '#6d0220', '#6a011f' )
 # maturation score colors
 my.cols.RYG <- colorRampPalette(c("#a50026", "#d73027", "#f46d43", "#fdae61", "#fee08b",
 "#ffffbf", "#d9ef8b", "#a6d96a", "#66bd63", "#1a9850", "#006837"))(11)
-
+sns.RdBu_r_15 = c('#175290', '#2a71b2', '#3f8ec0', '#6bacd1', '#9bc9e0', '#c2ddec', '#e0ecf3', '#f7f6f6', '#fbe5d8', '#fbccb4', '#f5aa89', '#e48066', '#d05548', '#ba2832', '#930e26')
 #' produce unique string baes on Seurat object's meta data
 UniqueName <- function(object, fileName = NULL, unique.name = T){
     if(is.logical(unique.name)){
