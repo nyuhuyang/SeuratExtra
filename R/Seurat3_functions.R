@@ -2494,59 +2494,60 @@ PCAPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size = 
 
 
 
-#' prepare exp and tsne file
 PrepareShiny <- function(object, samples, Rshiny_path, split.by = "orig.ident",reduction = "tsne",
                          verbose = F,scale =NULL, assay = NULL){
-    if(missing(object) | class(object) != "Seurat") stop("samples is not provided")
-    if(missing(samples)) stop("samples is not provided")
-    if(missing(Rshiny_path)) stop("Rshiny_path is not provided")
-    assay = DefaultAssay(object) %||% assay
-    Idents(object) <-  split.by
-    avaible_samples <- samples %in% c("All_samples",object@meta.data[,split.by])
-    if (!all(avaible_samples))
-        stop(paste(paste(samples[!avaible_samples],collapse = " "),
-                   "are not exist in the data."))
-    max_exp <- list()
-    if("All_samples" %in% samples) {
-        single_object <- object
-    } else single_object <- subset(object, idents = samples)
-    max_exp = rowMax(single_object[[assay]]@data) %>% as.vector()
-    max_exp = max_exp/log(2)
-    names(max_exp) = rownames(single_object)
-    
-    exp <- list()
-    tsne <- list()
-    for (i in seq_along(samples)){
-        sample <- samples[i]
-        if(sample == "All_samples") {
-            single_object <- object
-        } else single_object <- subset(object, idents = sample)
-        #============== exp csv===============
-        data <- GetAssayData(single_object)
-        data <- as(data, "sparseMatrix")
-        data = data/log(2)
-        #bad <- rowMax(data) == 0
-        #data = data[!bad,]
+        if(missing(object) | class(object) != "Seurat") stop("samples is not provided")
+        if(missing(samples)) stop("samples is not provided")
+        if(missing(Rshiny_path)) stop("Rshiny_path is not provided")
+        assay = DefaultAssay(object) %||% assay
+        Idents(object) <-  split.by
+        avaible_samples <- samples %in% c("All_samples",object@meta.data[,split.by])
+        if (!all(avaible_samples))
+                stop(paste(paste(samples[!avaible_samples],collapse = " "),
+                           "are not exist in the data."))
+        if("All_samples" %in% samples) {
+                single_object <- object
+        } else single_object <- subset(object, idents = samples)
+        max_exp <- list()
         if(!is.null(scale)){
-            range <- rowMax(data) - rowMin(data) # range <- apply(data,1,max) - apply(data,1,min)
-            data = sweep(data, 1, range,"/")*scale
+                max_exp = qlcMatrix::rowMax(single_object[[assay]]@data) %>% as.vector()
+                max_exp = max_exp/log(2)
+                names(max_exp) = rownames(single_object)
         }
         
-        if(verbose) {
-            print(sample)
-            print(format(object.size(data),units="MB"))
+        exp <- list()
+        tsne <- list()
+        for (i in seq_along(samples)){
+                sample <- samples[i]
+                if(sample == "All_samples") {
+                        single_object <- object
+                } else single_object <- subset(object, idents = sample)
+                #============== exp csv===============
+                data <- GetAssayData(single_object)
+                data <- as(data, "sparseMatrix")
+                data = data/log(2)
+                #bad <- rowMax(data) == 0
+                #data = data[!bad,]
+                if(!is.null(scale)){
+                        range <- rowMax(data) - rowMin(data) # range <- apply(data,1,max) - apply(data,1,min)
+                        data = sweep(data, 1, range,"/")*scale
+                }
+                
+                if(verbose) {
+                        print(sample)
+                        print(format(object.size(data),units="MB"))
+                }
+                exp[[i]] = data
+                #============== tsne csv===============
+                tsne[[i]] = Embeddings(single_object, reduction = reduction)
+                
+                svMisc::progress(i/length(samples)*100)
         }
-        exp[[i]] = data
-        #============== tsne csv===============
-        tsne[[i]] = Embeddings(single_object, reduction = reduction)
-        
-        svMisc::progress(i/length(samples)*100)
-    }
-    names(exp) = samples
-    names(tsne) = samples
-    shiny_data_path <- paste0(Rshiny_path, "data/")
-    if(!dir.exists(shiny_data_path)) dir.create(shiny_data_path, recursive = T)
-    save(exp,tsne,max_exp, file = paste0(shiny_data_path,basename(Rshiny_path),".Rda"))
+        names(exp) = samples
+        names(tsne) = samples
+        shiny_data_path <- paste0(Rshiny_path, "data/")
+        if(!dir.exists(shiny_data_path)) dir.create(shiny_data_path, recursive = T)
+        save(exp,tsne,max_exp, file = paste0(shiny_data_path,basename(Rshiny_path),".Rda"))
 }
 
 
@@ -2852,14 +2853,13 @@ Singler.colors <- c("#7FC97F","#BEAED4","#FDC086","#386CB0","#F0027F",
                     "#4DAF4A","#984EA3","#c6c386","#999999","#66C2A5",
                     "#FC8D62","#A6D854","#FFD92F","#BEBADA",
                     "#FB8072","#80B1D3","#FDB462","#BC80BD","#B3B3B3",
-                    "#33A02C","#B3DE69","#4038b0","#ee7576","#FED9A6",
-                    "#FDDAEC","#e94749","#E78AC3","#ff0000",
+                    "#33A02C","#B3DE69","#4038b0","#ee7576","#e94749","#E78AC3","#ff0000",
                     "#A65628","#d80172","#F781BF","#D95F02","#E7298A",
                     "#1F78B4","#FDBF6F","#CAB2D6","#B15928","#FBB4AE",
-                    "#B3CDE3","#CCEBC5","#DECBE4","#E5D8BD","#F2F2F2",
-                    "#B3E2CD","#FDCDAC","#CBD5E8","#F4CAE4","#E6F5C9",
-                    "#FFF2AE","#F1E2CC","#CCCCCC","#8DD3C7","#FFFFB3",
-                    "#FCCDE5","#D9D9D9","#FFED6F")
+                    "#B3CDE3",
+                    '#0173b2','#de8f05','#029e73','#d55e00','#cc78bc','#ca9161','#fbafe4','#949494','#ece133','#56b4e9', # seaborn.color_palette colorblind
+                    "#00AFBB", "#E7B800", "#FC4E07",
+                    "#FFDB6D", "#C4961A", "#F4EDCA", "#D16103", "#C3D7A4", "#52854C", "#4E84C4", "#293352")
 sns.RdBu_r_199 = c('#063264', '#073467', '#08366a', '#0a3b70', '#0c3d73', '#0d3f76', '#0e4179',
                '#10457e', '#114781', '#124984', '#144e8a', '#15508d', '#175290', '#185493',
                '#1a5899', '#1b5a9c', '#1c5c9f', '#1e61a5', '#1f63a8', '#2065ab', '#2267ac',
