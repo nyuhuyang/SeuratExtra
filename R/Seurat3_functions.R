@@ -2489,7 +2489,8 @@ PCAPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size = 
         print(plots)
         dev.off()
     }
-    if(do.return & Sys.info()[['sysname']] != "Linux") return(plots)
+    #if(do.return & Sys.info()[['sysname']] != "Linux") return(plots)
+    if(do.return) return(plots)
 }
 
 
@@ -2674,7 +2675,8 @@ TSNEPlot.1 <- function(object,dims = c(1, 2),cells = NULL, cols = NULL, pt.size 
         print(plots)
         dev.off()
     }
-    if(do.return & Sys.info()[['sysname']] != "Linux") return(plots)
+    #if(do.return & Sys.info()[['sysname']] != "Linux") return(plots)
+    if(do.return) return(plots)
 }
 
 # VolcanoPlots to demonstrate Differential expressed genes
@@ -2847,7 +2849,8 @@ UMAPPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size =
         print(plots)
         dev.off()
     }
-    if(do.return & Sys.info()[['sysname']] != "Linux") return(plots)
+    #if(do.return & Sys.info()[['sysname']] != "Linux") return(plots)
+    if(do.return) return(plots)
 }
 
 
