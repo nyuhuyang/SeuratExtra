@@ -2263,7 +2263,7 @@ ReportGSEA <- function(file, pos=T,ncol = 3){
 #' @param x_left,x_right,y_bottom,y_top, coordinate values anti-clockwise from left bottom
 #' @param ... argments pass to geom_segment
 #' @example rectangle(-4.6, -4.1, -4.7, -5.5,colour = "blue")
-rectangle <- function(x_left, x_right, y_bottom, y_top, ...){
+rectangle <- function(x_left = -Inf, x_right = Inf, y_bottom = -Inf, y_top = Inf, ...){
     list(geom_segment(aes(x = x_left, xend = x_right, y = y_top, yend = y_top),...),
     geom_segment(aes(x = x_right, xend = x_right, y = y_top, yend = y_bottom),...),
     geom_segment(aes(x = x_left, xend = x_right, y = y_bottom, yend = y_bottom),...),
