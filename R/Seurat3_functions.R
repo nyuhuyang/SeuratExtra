@@ -204,12 +204,12 @@ BlendPlot <- function (data.use, features, data.plot, pt.size, pch.use,alpha,
     }
     if (breaks < 2) {
         
-            cuts = as.matrix(data.gene)
-            cuts[data.gene[,1] > 0, 1] = 1
-            cuts[data.gene[,1] <= 0, 1] = 0
-            cuts[data.gene[,2] > 0, 2] = 1
-            cuts[data.gene[,2] <= 0, 2] = 0
-            cuts = as.data.frame(cuts)
+        cuts = as.matrix(data.gene)
+        cuts[1, data.gene[1,] > 0] = 1
+        cuts[1, data.gene[1,] <= 0] = 0
+        cuts[2, data.gene[2,] > 0] = 1
+        cuts[2, data.gene[2,] <= 0] = 0
+        cuts = as.data.frame(cuts)
         
         } else if ( breaks >= 2){
             
@@ -224,7 +224,7 @@ BlendPlot <- function (data.use, features, data.plot, pt.size, pch.use,alpha,
     #if(any(apply(cuts,1,min) !=0)) {
     #    cuts[apply(cuts,1,min) !=1,] = 1
     #}
-    data.cut = apply(X = cuts, MARGIN = 1, FUN = function(x) {
+    data.cut = apply(X = cuts, MARGIN = 2, FUN = function(x) {
             return(if ((x[1] == 0) && (x[2] > 0)) {
                     "high2"
             } else if ((x[1] > 0) && (x[2] == 0)) {
