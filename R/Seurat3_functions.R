@@ -142,7 +142,7 @@ Alias <- function(df, gene = "HLA-DRB1"){
 #' @param breaks parameter pass to cut function. greater than or equal to 2. 
 #'               when breaks = 0, label as with/without expression
 BlendPlot <- function (data.use, features, data.plot, pt.size, pch.use,alpha,
-                       cols.use, dim.codes, min.cutoff, max.cutoff, breaks=2,
+                       cols.use, dim.codes, min.cutoff, max.cutoff, breaks=0,
                        no.axes, no.legend,
                        dark.theme)
 {
@@ -200,14 +200,16 @@ BlendPlot <- function (data.use, features, data.plot, pt.size, pch.use,alpha,
     colnames(x = data.gene) <- cell.names
     
     if (all(data.gene == 0)) {
-        stop("all(data.gene == 0)")
+            stop("All cells have zero expression!")
     }
     if (breaks < 2) {
         
-        cuts = as.matrix(data.gene)
-        cuts[data.gene > 0 ] = 2
-        cuts[data.gene == 0 ] = 1
-        cuts = as.data.frame(cuts)
+            cuts = as.matrix(data.gene)
+            cuts[data.gene[,1] > as.numeric(input$threshold1), 1] = 1
+            cuts[data.gene[,1] <= as.numeric(input$threshold1), 1] = 0
+            cuts[data.gene[,2] > as.numeric(input$threshold2), 2] = 1
+            cuts[data.gene[,2] <= as.numeric(input$threshold2), 2] = 0
+            cuts = as.data.frame(cuts)
         
         } else if ( breaks >= 2){
             
@@ -218,20 +220,20 @@ BlendPlot <- function (data.use, features, data.plot, pt.size, pch.use,alpha,
         }
         }
 
-    # check if minimal is not 1
-    if(any(apply(cuts,1,min) !=1)) {
-        cuts[apply(cuts,1,min) !=1,] = 1
-    }
-    data.cut = apply(X = cuts, MARGIN = 2, FUN = function(x) {
-        return(if ((x[1] == 1) && (x[2] > 1)) {
-            "high2"
-        } else if ((x[1] > 1) && (x[2] == 1)) {
-            "high1"
-        } else if ((x[1] > 1) && (x[2] > 1)) {
-            "highboth"
-        } else {
-            "low"
-        })
+    # check if minimal is not 0
+    #if(any(apply(cuts,1,min) !=0)) {
+    #    cuts[apply(cuts,1,min) !=1,] = 1
+    #}
+    data.cut = apply(X = cuts, MARGIN = 1, FUN = function(x) {
+            return(if ((x[1] == 0) && (x[2] > 0)) {
+                    "high2"
+            } else if ((x[1] > 0) && (x[2] == 0)) {
+                    "high1"
+            } else if ((x[1] > 0) && (x[2] > 0)) {
+                    "highboth"
+            } else {
+                    "low"
+            })
     })
     data.cut <- as.factor(x = data.cut)
     data.cut <- factor(data.cut, levels = c("low","high1","high2","highboth"))
@@ -254,7 +256,8 @@ BlendPlot <- function (data.use, features, data.plot, pt.size, pch.use,alpha,
                                              from = c("low","high1","high2","highboth"),
                                              to = alpha) %>% as.numeric()
     }
-    data.plot %<>% arrange(colors)
+    data.plot = arrange(data.plot, colors)
+    
     if(breaks < 2){
         legend.names <- c(high1 = features[1],
                           high2 = features[2], highboth = "Both")
@@ -2503,6 +2506,7 @@ PrepareShiny <- function(object, samples, Rshiny_path, split.by = "orig.ident",r
     if(missing(Rshiny_path)) stop("Rshiny_path is not provided")
     assay = DefaultAssay(object) %||% assay
     Idents(object) <-  split.by
+    if(class(object@meta.data[,split.by]) == "factor") object@meta.data[,split.by] %<>% as.character()
     avaible_samples <- samples %in% c("All_samples",object@meta.data[,split.by])
     if (!all(avaible_samples))
         stop(paste(paste(samples[!avaible_samples],collapse = " "),
