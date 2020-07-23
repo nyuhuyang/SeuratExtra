@@ -205,10 +205,10 @@ BlendPlot <- function (data.use, features, data.plot, pt.size, pch.use,alpha,
     if (breaks < 2) {
         
             cuts = as.matrix(data.gene)
-            cuts[data.gene[,1] > as.numeric(input$threshold1), 1] = 1
-            cuts[data.gene[,1] <= as.numeric(input$threshold1), 1] = 0
-            cuts[data.gene[,2] > as.numeric(input$threshold2), 2] = 1
-            cuts[data.gene[,2] <= as.numeric(input$threshold2), 2] = 0
+            cuts[data.gene[,1] > 0, 1] = 1
+            cuts[data.gene[,1] <= 0, 1] = 0
+            cuts[data.gene[,2] > 0, 2] = 1
+            cuts[data.gene[,2] <= 0, 2] = 0
             cuts = as.data.frame(cuts)
         
         } else if ( breaks >= 2){
