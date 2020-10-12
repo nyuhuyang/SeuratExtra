@@ -487,7 +487,7 @@ DoHeatmap.1 <- function(object, marker_df,features = NULL, cells = NULL,
                          assay = NULL, label = TRUE, size = 5.5, hjust = 0, angle = 45, 
                          raster = TRUE, draw.lines = TRUE, lines.width = NULL, group.bar.height = 0.02, 
                          combine = TRUE,title = "",title.size = 14,do.print = FALSE,
-                        position = "right",save.path = NULL,
+                        position = "right",save.path = NULL,pal_gsea = FALSE,
                         cex.row=12,legend.size = NULL,units="in", width=10, height=7,res=600,...){
     v <- UniqueName(object = object, fileName = deparse(substitute(object)), unique.name = unique.name)
     v = paste0(v,"_",FindIdentLabel(object))
@@ -510,7 +510,7 @@ DoHeatmap.1 <- function(object, marker_df,features = NULL, cells = NULL,
                          lines.width = lines.width, group.bar.height = group.bar.height, 
                          combine = combine)+
         scale_y_discrete(position = position)
-    #if(pal_gsea) heatmap = heatmap + scale_fill_gradientn(colors = ggsci::pal_gsea()(12))
+    if(pal_gsea) heatmap = heatmap + scale_fill_gradientn(colors = ggsci::pal_gsea()(12))
     if(!is.null(colors)) heatmap = heatmap + scale_fill_gradientn(colors = colors)
     if(!is.null(title)) {
         heatmap = heatmap+ ggtitle(title)+ 
@@ -682,7 +682,7 @@ DoHeatmap.matrix <- function (data.use, features = NULL, cells = NULL,
     if(no.legend) plots = plots + NoLegend()
     if(do.print){
         if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
-        #if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
+        if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
         jpeg(paste0(save.path,".jpeg"),
              units=units, width=width, height=height,res=res)
         print(plots)
@@ -1302,7 +1302,7 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
 #' @example FindAllMarkers.UMI(object)
 FindAllMarkers.UMI <- function (object, assay = NULL, features = NULL, logfc.threshold = 0.25, 
                               test.use = "MAST", slot = "data", min.pct = 0.1, min.diff.pct = -Inf, 
-                              p.adjust.methods = "fdr",
+                              p.adjust.methods = "bonferroni",
                               node = NULL, verbose = TRUE, only.pos = FALSE, max.cells.per.ident = Inf, 
                               random.seed = 1, latent.vars = NULL, min.cells.feature = 3, 
                               min.cells.group = 3, pseudocount.use = 1, return.thresh = 0.01, 
@@ -1754,9 +1754,17 @@ Human2Mouse <- function(x){
 #' data(brainTxDbSets)
 #' brainTxDbSets_df <- list2df(brainTxDbSets)
 list2df <- function(list){
-    df <- do.call(rowr::cbind.fill, c(list, fill = NA))
-    names(df) = names(list)
-    return(df)
+        cbind.fill <- function(...){
+                nm <- list(...) 
+                nm <- lapply(nm, as.matrix)
+                n <- max(sapply(nm, nrow)) 
+                do.call(cbind, lapply(nm, function (x) 
+                        rbind(x, matrix(, n-nrow(x), ncol(x))))) 
+        }
+
+        df <- do.call(cbind.fill, list)
+        colnames(df) = names(list)
+        return(df)
 }
 
 
@@ -2673,7 +2681,7 @@ TSNEPlot.1 <- function(object,dims = c(1, 2),cells = NULL, cols = NULL, pt.size 
                                      no =""))
     if(do.print) {
         if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
-        #if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
+        if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
         jpeg(paste0(save.path,"TSNEPlot_",VarName,L,".jpeg"), 
              units=units, width=width, height=height,res=600)
         print(plots)
