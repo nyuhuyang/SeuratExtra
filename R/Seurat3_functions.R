@@ -2290,9 +2290,7 @@ Read10X.1 <- function(
         barcodes.fileName = 'barcodes.tsv',
         gene.fileName = 'genes.tsv',
         features.fileName = 'features.tsv.gz',
-        matrix.fileName = 'matrix.mtx'
-        
-) {
+        matrix.fileName = 'matrix.mtx') {
         full.data <- list()
         for (i in seq_along(along.with = data.dir)) {
                 run <- data.dir[i]
