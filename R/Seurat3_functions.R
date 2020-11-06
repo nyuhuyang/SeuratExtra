@@ -427,7 +427,7 @@ CombPngs <- function(...,ncol = 2, do.print = FALSE, do.save = TRUE, bottom_text
     if(do.print) {
         do.call(gridExtra::grid.arrange ,c(Img, ncol = ncol, bottom_text = NULL))
     } else if(do.save) {
-        jpeg(paste0(path,deparse(substitute(...)),"_CombPngs.jpeg"), units="in", width=10, height=7,res=600)
+        jpeg(paste0(path,deparse(substitute(...)),"_CombPngs.jpeg"), units=units, width=10, height=7,res=600)
         do.call(gridExtra::grid.arrange ,c(Img, ncol = ncol, bottom_text = NULL))
         dev.off()
     }
@@ -528,9 +528,9 @@ DoHeatmap.1 <- function(object, marker_df,features = NULL, cells = NULL,
     }
     if(no.legend) heatmap = heatmap + NoLegend()
     if(do.print){
-        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
-        #if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-        jpeg(paste0(save.path,file.name),units=units, width=width, height=height,res=res)
+        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
+        if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
+        jpeg(paste0(save.path, "/", file.name),units=units, width=width, height=height,res=res)
         print(heatmap)
         dev.off()
     } else return(heatmap)
@@ -548,7 +548,7 @@ DoHeatmap.matrix <- function (data.use, features = NULL, cells = NULL,
                               assay = NULL, label = TRUE, colors = NULL, size = 5.5, hjust = 0, angle = 45, 
                               raster = TRUE, draw.lines = TRUE, lines.width = NULL, group.bar.height = 0.02, 
                               combine = TRUE,title = "",title.size = 14,do.print = FALSE,
-                              pal_gsea = TRUE,position = "right",save.path = NULL,
+                              pal_gsea = TRUE,position = "right",save.path = NULL, file.name = NULL,
                               cex.row=12,legend.size = NULL,units="in", 
                               width=10, height=7,res=600,...) 
 {
@@ -684,10 +684,9 @@ DoHeatmap.matrix <- function (data.use, features = NULL, cells = NULL,
     }
     if(no.legend) plots = plots + NoLegend()
     if(do.print){
-        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
-        #if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-        jpeg(paste0(save.path,".jpeg"),
-             units=units, width=width, height=height,res=res)
+        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
+        if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
+        jpeg(paste0(save.path,"/",file.name), units=units, width=width, height=height,res=res)
         print(plots)
         dev.off()
     } else return(plots)
@@ -705,8 +704,13 @@ ElbowPlot.1 <- function (object, graph.name = "integrated_snn",reductions = "uma
                          check.by = c("Resolutions","Cluster.numbers"),
                          title = "",
                          unique.name= T, units="in", width=10, height=7,res=600,
-                         do.print = F, do.return = T, save.path = NULL,...) 
+                         do.print = F, do.return = T, save.path = NULL,file.name =NULL,...) 
 {
+    if (is.null(file.name)) {
+        file.name <- UniqueName(object,fileName = NULL,unique.name = unique.name)
+        file.name = paste0(file.name,"_",check.by[1])
+        file.name = paste0("ElbowPlot_",VarName,".jpeg")
+        }
     clustering.name <- grep(graph.name, colnames(object@meta.data), value = T)
     if (!any(clustering.name %in% colnames(object@meta.data))) {
         stop("Provided graph.name not present in Seurat object")
@@ -730,10 +734,7 @@ ElbowPlot.1 <- function (object, graph.name = "integrated_snn",reductions = "uma
                             }) %>% sum
         Progress(i, length(res))
     }
-    if (do.print) {
-        VarName <- UniqueName(object,fileName = NULL,unique.name = unique.name)
-        VarName = paste0(VarName,"_",check.by[1])
-    }
+
     if(check.by[1] == "Resolutions") data.use = data.frame(Resolutions = res, total.dist = total.dist)
     if(check.by[1] == "Cluster.numbers") data.use = data.frame(Cluster.numbers = k.num, total.dist = total.dist)
     plot <- ggscatter(data = data.use,
@@ -742,10 +743,9 @@ ElbowPlot.1 <- function (object, graph.name = "integrated_snn",reductions = "uma
                       title = title) + TitleCenter()
     
     if(do.print) {
-        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
+        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
         if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-        jpeg(paste0(save.path,"ElbowPlot_",VarName,".jpeg"), 
-             units=units, width=width, height=height,res=600)
+        jpeg(paste0(save.path,"/",file.name), units=units, width=width, height=height,res=600)
         print(plot)
         dev.off()
     }
@@ -797,8 +797,8 @@ ExtractMetaColor <- function(object, group.by = NULL){
 #' @example eulerr(T_cells_markers,shape =  "ellipse",cut_off = "avg_logFC", cut_off_value = 0.01)
 eulerr <- function(df, key = NULL, cut_off = "avg_logFC",cut_off_value = 0.05, 
                    do.lenged = TRUE,do.return = TRUE, return.raw = FALSE,
-                   do.print = FALSE,save.path = NULL,
-                   shape = c("circle", "ellipse"),...){
+                   do.print = FALSE,save.path = NULL,file.name =NULL,
+                   shape = c("circle", "ellipse"),units="in", width=width, height=height,res=res,...){
         df$cluster <- as.vector(df$cluster)
         df$gene <- as.vector(df$gene)
         if(!is.null(key)) df <- df[(df$cluster %in% key),]
@@ -817,10 +817,10 @@ eulerr <- function(df, key = NULL, cut_off = "avg_logFC",cut_off_value = 0.05,
         g <- plot(euler_df, quantities = TRUE, lty = 1:6,
                   legend = do.lenged, main = paste(cut_off," : ",cut_off_value))
         if(do.print) {
-            if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
-            #if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-            jpeg(paste0(save.path,"Venn_",cut_off,
-                        "_",cut_off_value,".jpeg"), units="in", width=10, height=7,res=600)
+            if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
+            if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
+            if(is.null(file.name)) file.name = paste0("Venn_",cut_off,"_",cut_off_value,".jpeg")
+            jpeg(paste0(save.path,"/",file.name), units=units, width=10, height=7,res=600)
             print(g)
             dev.off()
         }
@@ -843,12 +843,13 @@ FeaturePlot.1 <- function (object, features, dims = c(1, 2), cells = NULL,
                            label.size = 4,text.size = 15, repel = FALSE, ncol = NULL, combine = TRUE, border = FALSE,
                            coord.fixed = FALSE, by.col = TRUE,do.print = F,do.return =T,
                            title = NULL,unique.name = F,legend.title = NULL,no.AxesLabel = F,
-                           no.legend = F,units="in", width=10, height=7, save.path = NULL) {
-    if(do.print){
-        VarName <- UniqueName(object,fileName = deparse(substitute(object)),unique.name = unique.name)
-        VarName = paste0(VarName,"_",FindIdentLabel(object),
+                           no.legend = F,units="in", width=10, height=7,res = 600,
+                           save.path = NULL, file.name=NULL) {
+    if(is.null(file.name)){
+        file.name <- UniqueName(object,fileName = deparse(substitute(object)),unique.name = unique.name)
+        file.name = paste0(file.name,"_",FindIdentLabel(object),
                          ifelse(!is.null(split.by), yes = paste0("_",split.by), no =""))
-    } else VarName = ""
+    }
     no.right <- theme(axis.line.y.right = element_blank(), axis.ticks.y.right = element_blank(), 
                       axis.text.y.right = element_blank(), axis.title.y.right = element_text(face = "bold",size = 14, margin = margin(r = 7)))
     if (is.null(reduction)) {
@@ -1007,11 +1008,9 @@ FeaturePlot.1 <- function (object, features, dims = c(1, 2), cells = NULL,
     }
     if(!is.null(legend.title)) plot = plot + labs(fill = legend.title)
     if(do.print) {
-        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
+        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
         if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-        jpeg(paste(paste0(save.path,"FeaturePlot_"),VarName,paste(features,collapse = "-"),
-                    reduction,L,".jpeg", sep = "_"), 
-             units=units, width=width, height=height,res=600)
+        jpeg(paste0(save.path,"/",file.name), units=units, width=width, height=height,res=res)
         print(plot)
         dev.off()
     }
@@ -1028,7 +1027,8 @@ FeaturePlot.2 <- function (object, features, min.cutoff = NA, max.cutoff = NA,
                            data.hover = "ident", do.identify = FALSE, breaks =2,
                            use.imputed = FALSE, nCol = NULL, no.axes = FALSE, no.legend = TRUE,
                            dark.theme = FALSE, do.return = TRUE, vector.friendly = FALSE,
-                           unique.name = F, do.print = FALSE, file.name = NULL,...)
+                           unique.name = F, do.print = FALSE, file.name = NULL,
+                           units="in", width=10, height=7,res=600,...)
 {
     if(is.null(file.name)){
         VarName <- UniqueName(object,fileName = deparse(substitute(object)),unique.name = unique.name)
@@ -1036,7 +1036,7 @@ FeaturePlot.2 <- function (object, features, min.cutoff = NA, max.cutoff = NA,
                          ifelse(!is.null(split.by), yes = paste0("_",split.by), no =""))
         file.name = paste0("FeaturePlot_",VarName,"_",paste(features,collapse = "-"),
         "_",reduction,"_",L,".jpeg")
-    } else VarName = ""
+    }
 
     cells <- cells %||% colnames(x = object)
     if (is.null(x = nCol)) {
@@ -1099,10 +1099,9 @@ FeaturePlot.2 <- function (object, features, min.cutoff = NA, max.cutoff = NA,
                                     plot.title = element_text(size = 16,
                                                               hjust = 0.5))
     if(do.print) {
-        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
+        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
         if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-        jpeg(paste0(save.path,file.name), 
-             units=units, width=width, height=height,res=600)
+        jpeg(paste0(save.path, "/", file.name), units=units, width=width, height=height,res=res)
         print(pList[[1]])
         dev.off()
     }
@@ -1163,12 +1162,11 @@ FgseaBarplot <- function(stats=res, pathways=hallmark, nperm=1000,cluster = 1,
     if(cut.off == "pval") p = p + geom_col(aes(fill = pval < cut.off.value))
     if(cut.off == "padj") p = p + geom_col(aes(fill = padj < cut.off.value))
     if(no.legend) p = p + NoLegend()
-    path <- paste0("output/",gsub("-","",Sys.Date()),"/")
     if(do.print){
-        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
+        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
         if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
         if(is.null(file.name)) file.name =  paste0("Barplot_",sample,"_",cluster,"-",pathway.name,".jpeg")
-        jpeg(paste0(save.path,file.name), units="in", width=width, height=height,res=600)
+        jpeg(paste0(save.path, "/", file.name), units=units, width=width, height=height,res=600)
         print(p)
         dev.off()
     }
@@ -1285,13 +1283,11 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
         theme(plot.title = element_text(hjust = hjust,size = font.main))
     if(size == "padj") plot = plot + scale_size(breaks=c(0,0.05,0.10,0.15,0.2,0.25),
                                                 labels=rev(c(0,0.05,0.10,0.15,0.2,0.25)))
-    if(is.null(save.path)) {
-        save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
-        if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-    }
+    if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
+    if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
     if(is.null(file.name)) file.name =  paste0("Dotplot_",title,"_",pathway.name,
                                                "_",padj,"_",pval,".jpeg")
-    jpeg(paste0(save.path,file.name),units="in", width=width, height=height,res=600)
+    jpeg(paste0(save.path, "/", file.name),units=units, width=width, height=height,res=600)
     print(plots)
     dev.off()
     if(do.return & return.raw) {
@@ -1625,7 +1621,7 @@ FindPairMarkers <- function(object, ident.1, ident.2 = NULL, features = NULL,
         gde[[i]]$cluster1.vs.cluster2 <- ident.1vs2
         gde[[i]]$gene <- rownames(x = gde[[i]])
         if(save.files){
-            if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
+            if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
             if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
             write.csv( gde[[i]], paste0(save.path,ident2,"_vs_",ident1,".csv"))
         }
@@ -1847,10 +1843,10 @@ MakeCorlorBar <- function(object, marker_df, Top_n = NULL, features = NULL, colo
         g = g + scale_fill_manual(values = colors_fill)
     }
     if(do.print) {
-        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
+        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
         if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
         jpeg(paste0(save.path,"Doheatmap_vcolorbar_",v,".jpeg"),
-             units="in", width=width, height=height,res=600)
+             units=units, width=width, height=height,res=600)
         print(g)
         dev.off()
     } else if(do.return & Sys.info()[['sysname']] != "Linux") {
@@ -2176,7 +2172,7 @@ PrepareGSEA <- function(object, k = 1, do.return = FALSE, continuous.label = NUL
     }
     file.name = paste(unique(object@ident), collapse = "_")
     if(!is.null(continuous.label)) file.name <- paste(continuous.label,collapse = "_")
-    if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
+    if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
     if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
     write.table(GSEA_expr, file = paste0(save.path, file.name,
                                          "_",k,".txt"),
@@ -2666,9 +2662,9 @@ PCAPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size = 
         theme(panel.border = element_rect(colour = "black"))
 
     if(do.print) {
-        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
+        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
         if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-        jpeg(paste0(save.path,file.name), 
+        jpeg(paste0(save.path, "/", file.name), 
              units=units, width=width, height=height,res=600)
         print(plots)
         dev.off()
@@ -2860,9 +2856,9 @@ TSNEPlot.1 <- function(object,dims = c(1, 2),cells = NULL, cols = NULL, pt.size 
         theme(panel.border = element_rect(colour = "black"))
     
     if(do.print) {
-        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
-        #if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-        jpeg(paste0(save.path,file.name), units=units, width=width, height=height,res=600)
+        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
+        if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
+        jpeg(paste0(save.path, "/", file.name), units=units, width=width, height=height,res=600)
         print(plots)
         dev.off()
     }
@@ -3036,9 +3032,9 @@ UMAPPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size =
         theme(panel.border = element_rect(colour = "black"))
     
     if(do.print) {
-        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
+        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
         if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-        jpeg(paste0(save.path,file.name), units=units, width=width, height=height,res=600)
+        jpeg(paste0(save.path, "/", file.name), units=units, width=width, height=height,res=600)
         print(plots)
         dev.off()
     }
