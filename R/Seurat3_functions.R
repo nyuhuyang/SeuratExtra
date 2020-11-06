@@ -481,23 +481,27 @@ df2list <- function(df){
 #                   group.order = major_cells,ident.use = "all cell types",
 #                   group.label.rot = T,cex.row = 5,remove.key =T)
 #
-DoHeatmap.1 <- function(object, marker_df,features = NULL, cells = NULL, 
-                        no.legend =F,unique.name= T, Top_n = 10, group.by = "ident", 
-                         group.bar = TRUE, group.colors = NULL, colors=NULL, disp.min = -2.5, disp.max = NULL, slot = "scale.data", 
-                         assay = NULL, label = TRUE, size = 5.5, hjust = 0, angle = 45, 
-                         raster = TRUE, draw.lines = TRUE, lines.width = NULL, group.bar.height = 0.02, 
-                         combine = TRUE,title = "",title.size = 14,do.print = FALSE,
-                        position = "right",save.path = NULL,pal_gsea = FALSE,
+DoHeatmap.1 <- function(object, marker_df,features = NULL, cells = NULL,
+                        no.legend =F,unique.name= T, Top_n = 10, group.by = "ident",
+                        group.bar = TRUE, group.colors = NULL, colors=NULL, disp.min = -2.5, disp.max = NULL, slot = "scale.data",
+                        assay = NULL, label = TRUE, size = 5.5, hjust = 0, angle = 45,
+                        raster = TRUE, draw.lines = TRUE, lines.width = NULL, group.bar.height = 0.02,
+                        combine = TRUE,title = "",title.size = 14,do.print = FALSE,
+                        position = "right",save.path = NULL,file.name = NULL,
                         cex.row=12,legend.size = NULL,units="in", width=10, height=7,res=600,...){
-    v <- UniqueName(object = object, fileName = deparse(substitute(object)), unique.name = unique.name)
-    v = paste0(v,"_",FindIdentLabel(object))
+    if(is.null(file.name)){
+        v <- UniqueName(object = object, fileName = deparse(substitute(object)), unique.name = unique.name)
+        v = paste0(v,"_",FindIdentLabel(object))
+        if(!no.legend) v = paste0(v, "_Legend")
+        file.name = paste0("Heatmap_top",Top_n,"_",v,".jpeg")
+    }
+    
     if(class(title) != "character") stop("Title is incorrect")
-    if(!no.legend) v = paste0(v, "_Legend")
     if (!missing(x = marker_df)) {
         
         colnames(marker_df)[grep("cluster*.",colnames(marker_df))[1]] = "cluster"
-        top <-  marker_df %>% 
-            group_by(cluster) %>% 
+        top <-  marker_df %>%
+            group_by(cluster) %>%
             top_n(Top_n, avg_logFC)
         features = c(base::as.character(top$gene),features)
     }
@@ -507,15 +511,15 @@ DoHeatmap.1 <- function(object, marker_df,features = NULL, cells = NULL,
                          group.bar = group.bar, group.colors, disp.min = disp.min, disp.max = disp.max,
                          slot = slot, assay = assay, label = label, size = size,
                          hjust = hjust, angle = angle, raster = raster, draw.lines = draw.lines,
-                         lines.width = lines.width, group.bar.height = group.bar.height, 
+                         lines.width = lines.width, group.bar.height = group.bar.height,
                          combine = combine)+
         scale_y_discrete(position = position)
-    if(pal_gsea) heatmap = heatmap + scale_fill_gradientn(colors = ggsci::pal_gsea()(12))
+    #if(pal_gsea) heatmap = heatmap + scale_fill_gradientn(colors = ggsci::pal_gsea()(12))
     if(!is.null(colors)) heatmap = heatmap + scale_fill_gradientn(colors = colors)
     if(!is.null(title)) {
-        heatmap = heatmap+ ggtitle(title)+ 
+        heatmap = heatmap+ ggtitle(title)+
             theme(plot.title = element_text(size=title.size, hjust = 0.5,face="plain"))
-        }
+    }
     heatmap = heatmap + theme(axis.text.y = element_text(size = cex.row))
     if(!is.null(legend.size)) {
         heatmap = heatmap + theme(legend.text = element_text(size = legend.size),
@@ -524,12 +528,11 @@ DoHeatmap.1 <- function(object, marker_df,features = NULL, cells = NULL,
     }
     if(no.legend) heatmap = heatmap + NoLegend()
     if(do.print){
-            if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
-            #if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-            jpeg(paste0(save.path,"Heatmap_top",Top_n,"_",v,".jpeg"),
-                 units=units, width=width, height=height,res=res)
-            print(heatmap)
-            dev.off()
+        if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
+        #if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
+        jpeg(paste0(save.path,file.name),units=units, width=width, height=height,res=res)
+        print(heatmap)
+        dev.off()
     } else return(heatmap)
 }
 
@@ -1025,12 +1028,14 @@ FeaturePlot.2 <- function (object, features, min.cutoff = NA, max.cutoff = NA,
                            data.hover = "ident", do.identify = FALSE, breaks =2,
                            use.imputed = FALSE, nCol = NULL, no.axes = FALSE, no.legend = TRUE,
                            dark.theme = FALSE, do.return = TRUE, vector.friendly = FALSE,
-                           unique.name = F, do.print = FALSE, ...)
+                           unique.name = F, do.print = FALSE, file.name = NULL,...)
 {
-    if(do.print){
+    if(is.null(file.name)){
         VarName <- UniqueName(object,fileName = deparse(substitute(object)),unique.name = unique.name)
         VarName = paste0(VarName,"_",FindIdentLabel(object),
                          ifelse(!is.null(split.by), yes = paste0("_",split.by), no =""))
+        file.name = paste0("FeaturePlot_",VarName,"_",paste(features,collapse = "-"),
+        "_",reduction,"_",L,".jpeg")
     } else VarName = ""
 
     cells <- cells %||% colnames(x = object)
@@ -1096,8 +1101,7 @@ FeaturePlot.2 <- function (object, features, min.cutoff = NA, max.cutoff = NA,
     if(do.print) {
         if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
         if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-        jpeg(paste0(save.path,"FeaturePlot_",VarName,"_",paste(features,collapse = "-"),
-                    "_",reduction,"_",L,".jpeg"), 
+        jpeg(paste0(save.path,file.name), 
              units=units, width=width, height=height,res=600)
         print(pList[[1]])
         dev.off()
@@ -1114,7 +1118,7 @@ FgseaBarplot <- function(stats=res, pathways=hallmark, nperm=1000,cluster = 1,
                          title="", pathway.name = "Hallmark", hjust=0.5, 
                          width=10, height = 7, no.legend = FALSE,
                          cut.off = c("pval","padj"),cut.off.value = 0.25,
-                         do.print = TRUE, do.return = FALSE, save.path = NULL){
+                         do.print = TRUE, do.return = FALSE, save.path = NULL, file.name = NULL){
     
     res = stats[order(stats["avg_logFC"]),]
     geneRank = res[res$cluster == cluster,c("gene","avg_logFC")] %>% tibble::deframe
@@ -1163,7 +1167,8 @@ FgseaBarplot <- function(stats=res, pathways=hallmark, nperm=1000,cluster = 1,
     if(do.print){
         if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
         if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-        jpeg(paste0(save.path,sample,"_",cluster,"-",pathway.name,".jpeg"), units="in", width=width, height=height,res=600)
+        if(is.null(file.name)) file.name =  paste0("Barplot_",sample,"_",cluster,"-",pathway.name,".jpeg")
+        jpeg(paste0(save.path,file.name), units="in", width=width, height=height,res=600)
         print(p)
         dev.off()
     }
@@ -1189,14 +1194,15 @@ FgseaBarplot <- function(stats=res, pathways=hallmark, nperm=1000,cluster = 1,
 #' @export save.path folder to save
 #' @param ... ggballoonplot param
 #' @example FgseaDotPlot(stats=res, pathways=hallmark,title = "each B_MCL clusters")
-FgseaDotPlot <- function(stats=results, pathways=NULL, 
+FgseaDotPlot <- function(stats=results, pathways=NULL,
                          size = "-log10(pval)", Rowv = NULL,Colv = NULL,
                          font.ytickslab = 15,
                          fill = "NES", title="", order.yaxis.by = c(1,"pval"),
                          order.xaxis = NULL,decreasing = T,
                          pathway.name = "Hallmark",padj = 0.25, pval=0.05,
                          do.return = F,return.raw = F,font.main = 18,
-                         verbose=T,save.path = NULL, width=10, height=7,hjust=0.5,...){
+                         verbose=T,save.path = NULL, file.name = NULL,
+                         width=10, height=7,hjust=0.5,...){
     
     clusters = unique(as.character(stats$cluster))
     message("Calculate fgsea for each cluster.")
@@ -1209,13 +1215,13 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
         fgseaRes[[i]] = fgseaRes[[i]][,c("pathway","pval","padj","NES")]
         if(clusters[i] == order.yaxis.by[1]) {
             order.yaxis = fgseaRes[[i]][order(fgseaRes[[i]][,order.yaxis.by[2]],
-                                      decreasing = decreasing), "pathway"]
+                                              decreasing = decreasing), "pathway"]
         }
         if(!is.null(pval)) fgseaRes[[i]] = fgseaRes[[i]][fgseaRes[[i]]$pval < pval,]
         if(!is.null(padj)) fgseaRes[[i]] = fgseaRes[[i]][fgseaRes[[i]]$padj < padj,]
         if(nrow(fgseaRes[[i]]) > 0 ) {
             fgseaRes[[i]]$cluster = clusters[i]
-            } else fgseaRes[[i]] =NULL
+        } else fgseaRes[[i]] =NULL
         Progress(i, length(clusters))
     }
     df_fgseaRes <- data.table::rbindlist(fgseaRes) %>% as.data.frame()
@@ -1223,7 +1229,7 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
     df_fgseaRes[," -log10(pval)"] = -log10(df_fgseaRes$pval)
     df_fgseaRes[," -log10(padj)"] = -log10(df_fgseaRes$padj)
     if(verbose) print(round(dim(df_fgseaRes)/length(clusters)))
-
+    
     if(isTRUE(Rowv) | isTRUE(Colv)) {
         mtx_fgseaRes <- df_fgseaRes[,c("pathway","NES","cluster")]
         mtx_fgseaRes %<>% tidyr::spread(cluster,NES)
@@ -1267,24 +1273,25 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
     }
     #font.ytickslab= min(font.ytickslab,round(height*300/dim(df_fgseaRes)[1]))
     plots <- ggballoonplot(df_fgseaRes, x = "cluster", y = "pathway",
-                         size = size, fill = fill,
-                         size.range = c(1, 5),
-                         font.ytickslab= font.ytickslab,
-                         title = title,
-                         legend.title = ifelse(fill =="NES",
-                                               "Normalized\nenrichment\nscore",
-                                               NULL),
-                         xlab = "", ylab = "",...) +
+                           size = size, fill = fill,
+                           size.range = c(1, 5),
+                           font.ytickslab= font.ytickslab,
+                           title = title,
+                           legend.title = ifelse(fill =="NES",
+                                                 "Normalized\nenrichment\nscore",
+                                                 NULL),
+                           xlab = "", ylab = "",...) +
         scale_fill_gradientn(colors = rescale_colors())+ #RPMG::SHOWPAL(ggsci::pal_gsea()(12))
         theme(plot.title = element_text(hjust = hjust,size = font.main))
     if(size == "padj") plot = plot + scale_size(breaks=c(0,0.05,0.10,0.15,0.2,0.25),
-                                               labels=rev(c(0,0.05,0.10,0.15,0.2,0.25)))
+                                                labels=rev(c(0,0.05,0.10,0.15,0.2,0.25)))
     if(is.null(save.path)) {
         save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
         if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-        }
-    jpeg(paste0(save.path,"Dotplot_",title,"_",pathway.name,
-                "_",padj,"_",pval,".jpeg"),units="in", width=width, height=height,res=600)
+    }
+    if(is.null(file.name)) file.name =  paste0("Dotplot_",title,"_",pathway.name,
+                                               "_",padj,"_",pval,".jpeg")
+    jpeg(paste0(save.path,file.name),units="in", width=width, height=height,res=600)
     print(plots)
     dev.off()
     if(do.return & return.raw) {
@@ -2290,9 +2297,7 @@ Read10X.1 <- function(
         barcodes.fileName = 'barcodes.tsv',
         gene.fileName = 'genes.tsv',
         features.fileName = 'features.tsv.gz',
-        matrix.fileName = 'matrix.mtx'
-        
-) {
+        matrix.fileName = 'matrix.mtx') {
         full.data <- list()
         for (i in seq_along(along.with = data.dir)) {
                 run <- data.dir[i]
@@ -2578,11 +2583,18 @@ PCAPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size = 
                        na.value = 'gray97',combine = TRUE,ncol = NULL,title = NULL,legend.title = NULL,
                        no.legend = F,do.print = F,do.return = T,unique.name=F,
                        units= "in",width=10, height=7,hjust = 0.5,border = FALSE,
-                       save.path = NULL,...) {
-    if (do.print) {
+                       save.path = NULL,file.name = NULL, ...) {
+    if(is.null(file.name)){
         VarName <- UniqueName(object,fileName = deparse(substitute(object)),unique.name = unique.name)
         VarName = paste0(VarName,"_",group.by %||% FindIdentLabel(object))
-    } else VarName = ""
+        if(!no.legend) VarName = paste0(VarName, "_Legend")
+        VarName = paste0(VarName, ifelse(!is.null(split.by),
+                                         yes = paste0("_",split.by),
+                                         no =""))
+        L = ifelse(no.legend, "", "_Legend")
+        if(!label) L = paste0(L,"_noLabel")
+        file.name = paste0("PCAPlot_",VarName,L,".jpeg")
+    }
     cols = cols %||% ExtractMetaColor(object, group.by = group.by)
     reduction <- reduction %||% Seurat:::DefaultDimReduc(object = object)
     cells <- cells %||% colnames(x = object)
@@ -2645,23 +2657,18 @@ PCAPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size = 
     }
     if(no.legend) {
         plots = plots + NoLegend()
-        L = ""
     } else {
         plots = plots + theme(legend.text = element_text(size=legend.size))+
             guides(colour = guide_legend(override.aes = list(size=legend.size/5))) 
-        L = "_Legend"
     }
-    if(!label) L = paste0(L,"_noLabel")
     if (!is.null(legend.title)) plots = plots + labs(fill = legend.title)
     if(border) plots = plots + NoAxesLabel() + NoGrid()+
         theme(panel.border = element_rect(colour = "black"))
-    VarName = paste0(VarName, ifelse(!is.null(split.by), 
-                                     yes = paste0("_",split.by),
-                                     no =""))
+
     if(do.print) {
         if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
         if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-        jpeg(paste0(save.path,"PCAPlot_",VarName,L,".jpeg"), 
+        jpeg(paste0(save.path,file.name), 
              units=units, width=width, height=height,res=600)
         print(plots)
         dev.off()
@@ -2701,7 +2708,9 @@ PrepareShiny <- function(object, samples, Rshiny_path, split.by = "orig.ident",r
         sample <- samples[i]
         if(sample == "All_samples") {
             single_object <- object
-        } else single_object <- subset(object, idents = sample)
+        } else {cells <- colnames(object)[object@meta.data[,split.by] %in% sample]
+                single_object <- subset(object, cells= cells)
+        }
         #============== exp csv===============
         data <- GetAssayData(single_object)
         data <- as(data, "sparseMatrix")
@@ -2740,8 +2749,9 @@ TitleCenter <- function(size = 15, hjust = 0.5){
           plot.title = element_text(hjust = hjust))
 }
 
+
 #' Modified TSNEPlot
-#' @param label.repel 
+#' @param label.repel
 #' @param no.legend remove legend
 #' @param title add ggplot title
 #' @param do.print save jpeg file
@@ -2757,12 +2767,19 @@ TSNEPlot.1 <- function(object,dims = c(1, 2),cells = NULL, cols = NULL, pt.size 
                        na.value = 'gray97',combine = TRUE,ncol = NULL,title = NULL,legend.title = NULL,
                        no.legend = F,do.print = F,do.return = T,unique.name=F,
                        units= "in",width=10, height=7,hjust = 0.5,border = FALSE,
-                       save.path = NULL, ...) {
+                       save.path = NULL, file.name = NULL,...) {
     
-    if (do.print) {
+    if(is.null(file.name)){
         VarName <- UniqueName(object,fileName = deparse(substitute(object)),unique.name = unique.name)
         VarName = paste0(VarName,"_",group.by %||% FindIdentLabel(object))
-    } else VarName = ""
+        if(!no.legend) VarName = paste0(VarName, "_Legend")
+        VarName = paste0(VarName, ifelse(!is.null(split.by),
+                                         yes = paste0("_",split.by),
+                                         no =""))
+        L = ifelse(no.legend, "", "_Legend")
+        if(!label) L = paste0(L,"_noLabel")
+        file.name = paste0("TSNEPlot_",VarName,L,".jpeg")
+    }
     
     if (length(x = dims) != 2) {
         stop("'dims' must be a two-length vector")
@@ -2788,15 +2805,15 @@ TSNEPlot.1 <- function(object,dims = c(1, 2),cells = NULL, cols = NULL, pt.size 
         data[, split.by] <- object[[split.by, drop = TRUE]]
     }
     plots <- lapply(X = group.by, FUN = function(x) {
-        plot <- Seurat:::SingleDimPlot(data = data[, c(dims, x, split.by, shape.by)], 
+        plot <- Seurat:::SingleDimPlot(data = data[, c(dims, x, split.by, shape.by)],
                                        dims = dims, col.by = x, cols = cols,
-        pt.size = pt.size, shape.by = shape.by, order = order,
-        label = FALSE, cells.highlight = cells.highlight,
-        cols.highlight = cols.highlight, sizes.highlight = sizes.highlight,
-        na.value = na.value,...)
+                                       pt.size = pt.size, shape.by = shape.by, order = order,
+                                       label = FALSE, cells.highlight = cells.highlight,
+                                       cols.highlight = cols.highlight, sizes.highlight = sizes.highlight,
+                                       na.value = na.value,...)
         if (label & label.repel == F ) {
             plot <- LabelClusters(plot = plot, id = x, repel = repel,
-            size = label.size, split.by = split.by)
+                                  size = label.size, split.by = split.by)
         }
         if (label & label.repel) {
             plot <- LabelRepel(plot = plot, id = x, repel = repel,
@@ -2805,21 +2822,21 @@ TSNEPlot.1 <- function(object,dims = c(1, 2),cells = NULL, cols = NULL, pt.size 
         }
         if (!is.null(x = split.by)) {
             plot <- plot + theme(strip.background = element_blank(),
-                                 strip.text = element_text(face="plain",size=text.size))+ 
+                                 strip.text = element_text(face="plain",size=text.size))+
                 facet_wrap(facets = vars(!!sym(x = split.by)),
                            ncol = if (length(x = group.by) > 1 || is.null(x = ncol)) {
                                length(x = unique(x = data[, split.by]))
-                               } else ncol )
-
+                           } else ncol )
+            
         }
-        if(border == TRUE) plot = plot + NoAxesLabel() + 
+        if(border == TRUE) plot = plot + NoAxesLabel() +
                 theme(panel.border = element_rect(colour = "black"))
-
+        
         return(plot)
     })
     if (combine) {
         plots <- patchwork::wrap_plots(plots = plots, ncol = if (!is.null(x = split.by) &&
-        length(x = group.by) > 1) {
+                                                                 length(x = group.by) > 1) {
             1
         }
         else {
@@ -2832,30 +2849,27 @@ TSNEPlot.1 <- function(object,dims = c(1, 2),cells = NULL, cols = NULL, pt.size 
     }
     if(no.legend) {
         plots = plots + NoLegend()
-        L = ""
+        
     } else {
         plots = plots + theme(legend.text = element_text(size=legend.size))+
-            guides(colour = guide_legend(override.aes = list(size=legend.size/5))) 
-        L = "_Legend"
+            guides(colour = guide_legend(override.aes = list(size=legend.size/5)))
     }
-    if(!label) L = paste0(L,"_noLabel")
+    
     if (!is.null(legend.title)) plots = plots + labs(fill = legend.title)
     if(border) plots = plots + NoAxesLabel() + NoGrid()+
         theme(panel.border = element_rect(colour = "black"))
-    VarName = paste0(VarName, ifelse(!is.null(split.by), 
-                                     yes = paste0("_",split.by),
-                                     no =""))
+    
     if(do.print) {
         if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
-        if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-        jpeg(paste0(save.path,"TSNEPlot_",VarName,L,".jpeg"), 
-             units=units, width=width, height=height,res=600)
+        #if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
+        jpeg(paste0(save.path,file.name), units=units, width=width, height=height,res=600)
         print(plots)
         dev.off()
     }
     #if(do.return & Sys.info()[['sysname']] != "Linux") return(plots)
     if(do.return) return(plots)
 }
+
 
 # VolcanoPlots to demonstrate Differential expressed genes
 # https://zhuanlan.zhihu.com/p/82785739?utm_source=ZHShareTargetIDMore&utm_medium=social&utm_oi=642996063045423104
@@ -2918,7 +2932,7 @@ VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value =
 
 
 #' Modified UMAPPlot
-#' @param label.repel 
+#' @param label.repel
 #' @param no.legend remove legend
 #' @param title add ggplot title
 #' @param do.print save jpeg file
@@ -2933,12 +2947,19 @@ UMAPPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size =
                        na.value = 'gray97',combine = TRUE,ncol = NULL,title = NULL,legend.title = NULL,
                        no.legend = F,do.print = F,do.return = T,unique.name=F,
                        units= "in",width=10, height=7,hjust = 0.5,border = FALSE,
-                       save.path = NULL,...) {
-    if (do.print) {
+                       save.path = NULL,file.name = NULL,...) {
+    if(is.null(file.name)){
         VarName <- UniqueName(object,fileName = deparse(substitute(object)),unique.name = unique.name)
         VarName = paste0(VarName,"_",group.by %||% FindIdentLabel(object))
-    } else VarName = ""
-
+        if(!no.legend) VarName = paste0(VarName, "_Legend")
+        VarName = paste0(VarName, ifelse(!is.null(split.by),
+                                         yes = paste0("_",split.by),
+                                         no =""))
+        L = ifelse(no.legend, "", "_Legend")
+        if(!label) L = paste0(L,"_noLabel")
+        file.name = paste0("UMAPPlot_",VarName,L,".jpeg")
+    }
+    
     if (length(x = dims) != 2) {
         stop("'dims' must be a two-length vector")
     }
@@ -2963,7 +2984,7 @@ UMAPPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size =
         data[, split.by] <- object[[split.by, drop = TRUE]]
     }
     plots <- lapply(X = group.by, FUN = function(x) {
-        plot <- Seurat:::SingleDimPlot(data = data[, c(dims, x, split.by, shape.by)], 
+        plot <- Seurat:::SingleDimPlot(data = data[, c(dims, x, split.by, shape.by)],
                                        dims = dims, col.by = x, cols = cols,
                                        pt.size = pt.size, shape.by = shape.by, order = order,
                                        label = FALSE, cells.highlight = cells.highlight,
@@ -2980,20 +3001,20 @@ UMAPPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size =
         }
         if (!is.null(x = split.by)) {
             plot <- plot + theme(strip.background = element_blank(),
-                                 strip.text = element_text(face="plain",size=text.size))+ 
+                                 strip.text = element_text(face="plain",size=text.size))+
                 facet_wrap(facets = vars(!!sym(x = split.by)),
                            ncol = if (length(x = group.by) > 1 || is.null(x = ncol)) {
                                length(x = unique(x = data[, split.by]))
                            } else ncol )
             
         }
-        if(border == TRUE) plot = plot + NoAxesLabel() + 
+        if(border == TRUE) plot = plot + NoAxesLabel() +
                 theme(panel.border = element_rect(colour = "black"))
         return(plot)
     })
     if (combine) {
         plots <- patchwork::wrap_plots(plots = plots, ncol = if (!is.null(x = split.by) &&
-                                                        length(x = group.by) > 1) {
+                                                                 length(x = group.by) > 1) {
             1
         }
         else {
@@ -3006,24 +3027,18 @@ UMAPPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size =
     }
     if(no.legend) {
         plots = plots + NoLegend()
-        L = ""
     } else {
         plots = plots + theme(legend.text = element_text(size=legend.size))+
-            guides(colour = guide_legend(override.aes = list(size=legend.size/5))) 
-        L = "_Legend"
+            guides(colour = guide_legend(override.aes = list(size=legend.size/5)))
     }
-    if(!label) L = paste0(L,"_noLabel")
     if (!is.null(legend.title)) plots = plots + labs(fill = legend.title)
     if(border) plots = plots + NoAxesLabel() + NoGrid()+
         theme(panel.border = element_rect(colour = "black"))
-    VarName = paste0(VarName, ifelse(!is.null(split.by), 
-                                     yes = paste0("_",split.by),
-                                     no =""))
+    
     if(do.print) {
         if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()),"/")
         if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-        jpeg(paste0(save.path,"UMAPPlot_",VarName,L,".jpeg"), 
-             units=units, width=width, height=height,res=600)
+        jpeg(paste0(save.path,file.name), units=units, width=width, height=height,res=600)
         print(plots)
         dev.off()
     }
