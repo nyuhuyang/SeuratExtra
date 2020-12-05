@@ -696,7 +696,10 @@ DoHeatmap.matrix <- function (data.use, features = NULL, cells = NULL,
 #' Allow log expression
 
 #' @param log.data = log2, 
-#'
+#' @param cluster.features = FALSE, cluster features
+#' @param exp.min = NA, Set minimal expression level, 
+#' @param exp.max = NA, Set maximal expression level 
+#' @param n.breaks = NULL, number of breaks for expression color bar
 #' @examples
 #' cd_genes <- c("CD247", "CD3E", "CD9")
 #' DotPlot(object = pbmc_small, features = cd_genes)
@@ -717,10 +720,14 @@ DotPlot.1 <- function(
         group.by = NULL,
         split.by = NULL,
         cluster.idents = FALSE,
+        cluster.features = FALSE,
         scale = TRUE,
         scale.by = 'radius',
         scale.min = NA,
-        scale.max = NA
+        scale.max = NA,
+        exp.min = NA,
+        exp.max = NA,
+        n.breaks = NULL
 ) {
         assay <- assay %||% DefaultAssay(object = object)
         DefaultAssay(object = object) <- assay
@@ -802,6 +809,14 @@ DotPlot.1 <- function(
                 mat <- scale(x = mat)
                 id.levels <- id.levels[hclust(d = dist(x = mat))$order]
         }
+        if (cluster.features) {
+                mat <- do.call(
+                        what = rbind,
+                        args = lapply(X = data.plot, FUN = unlist)
+                )
+                mat <- scale(x = mat)
+                features <- features[hclust(d = dist(x = t(mat[,1:(ncol(mat)/2)])))$order]
+        }
         data.plot <- lapply(
                 X = names(x = data.plot),
                 FUN = function(x) {
@@ -813,6 +828,10 @@ DotPlot.1 <- function(
         )
         data.plot <- do.call(what = 'rbind', args = data.plot)
         if(is.function(log.data)) data.plot$avg.exp = log.data(data.plot$avg.exp+1)
+        if (!is.null(x = id.levels)) {
+                data.plot$id <- factor(x = data.plot$id, levels = id.levels)
+        }
+        
         if (!is.null(x = id.levels)) {
                 data.plot$id <- factor(x = data.plot$id, levels = id.levels)
         }
@@ -878,6 +897,12 @@ DotPlot.1 <- function(
         if (!is.na(x = scale.max)) {
                 data.plot[data.plot$pct.exp > scale.max, 'pct.exp'] <- scale.max
         }
+        if (!is.na(x = exp.min)) {
+                data.plot[data.plot[,color.by] < exp.min, color.by] <- exp.min
+        }
+        if (!is.na(x = exp.max)) {
+                data.plot[data.plot[,color.by] > exp.max, color.by] <- exp.max
+        }
         if (!is.null(x = feature.groups)) {
                 data.plot$feature.groups <- factor(
                         x = feature.groups[data.plot$features.plot],
@@ -915,7 +940,7 @@ DotPlot.1 <- function(
         } else {
                 plot <- plot + scale_fill_gradientn(
                         colours=cols,
-                        n.breaks = length(cols),
+                        n.breaks = n.breaks,
                         name = ifelse(test = is.function(log.data),
                                       yes = expression(atop("Mean non-zero\n expression",log[2](UMI+1))),
                                       no = expression(atop("Mean non-zero\n expression",(UMI)))), 
@@ -3110,14 +3135,14 @@ TSNEPlot.1 <- function(object,dims = c(1, 2),cells = NULL, cols = NULL, pt.size 
 # https://zhuanlan.zhihu.com/p/82785739?utm_source=ZHShareTargetIDMore&utm_medium=social&utm_oi=642996063045423104
 VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value = 0.05, cut_off_logFC = 0.25,top = 15,
                          sort.by = "p_val_adj",cols = c("#2a71b2","#d2dae2","#ba2832"),alpha=0.8, size=2,
-                         legend.size = 12) {
-    #data = data[data[,"p_val_adj"] < 1,]
-    #data = data[data[,cut_off[1]] < cut_off_value,]
+                         legend.size = 12, ...) {
     data[,paste0("log10_",cut_off[1])] = -log10(data[,cut_off[1]])
     data$change = ifelse(data[,cut_off[1]] < cut_off_value &
                              abs(data$avg_logFC) >= cut_off_logFC, 
                          ifelse(data$avg_logFC > cut_off_logFC ,'Upregulated','Downregulated'),
                          'Stable')
+    data$change %<>% as.factor() %>% 
+            factor(levels = c("Upregulated","Stable","Downregulated"))
     colnames(data)[grep("cluster",colnames(data))]="cluster"
     # 将需要标记的基因放置在单独的数组
     Up <- data[data$change %in% "Upregulated",]
@@ -3133,11 +3158,10 @@ VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value =
     p<-ggplot(
         #设置数据
         data, 
-        aes_string(x = "avg_logFC", 
-            y = paste0("log10_",cut_off[1]), 
-            colour="change"))+
-        geom_point(alpha=alpha, size=size)
-        
+        mapping = aes_string(x = "avg_logFC", 
+                             y = paste0("log10_",cut_off[1]),
+                             fill = "change"))+
+                geom_point(alpha=alpha, size=size,...)
         # 辅助线
     p = p + geom_vline(xintercept=c(-cut_off_logFC,cut_off_logFC),lty=4,col="black",lwd=0.8)
     p = p + geom_hline(yintercept = -log10(cut_off_value),lty=4,col="black",lwd=0.8) +
@@ -3161,7 +3185,7 @@ VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value =
                                      segment.color = "black", 
                                      show.legend = FALSE)+
         
-        scale_color_manual(values=cols[unique(data$change)])
+            scale_fill_manual(values=cols[unique(data$change)])
     return(p)
 }
 
