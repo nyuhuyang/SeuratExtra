@@ -3135,15 +3135,26 @@ TSNEPlot.1 <- function(object,dims = c(1, 2),cells = NULL, cols = NULL, pt.size 
 # VolcanoPlots to demonstrate Differential expressed genes
 # https://zhuanlan.zhihu.com/p/82785739?utm_source=ZHShareTargetIDMore&utm_medium=social&utm_oi=642996063045423104
 VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value = 0.05, cut_off_logFC = 0.25,top = 15,
-                         sort.by = "p_val_adj",cols = c("#2a71b2","#d2dae2","#ba2832"),alpha=0.8, size=2,
-                         legend.size = 12, ...) {
+                         sort.by = "p_val_adj",
+                         cols = c("#ba2832","#d2dae2","#2a71b2"),
+                         cols.order = c('Upregulated','Stable','Downregulated'),
+                         alpha=0.8, size=2,
+                         legend.size = 12, legend.position = "bottom", ...) {
     data[,paste0("log10_",cut_off[1])] = -log10(data[,cut_off[1]])
     data$change = ifelse(data[,cut_off[1]] < cut_off_value &
                              abs(data$avg_logFC) >= cut_off_logFC, 
                          ifelse(data$avg_logFC > cut_off_logFC ,'Upregulated','Downregulated'),
                          'Stable')
-    data$change %<>% as.factor() %>% 
-            factor(levels = c("Upregulated","Stable","Downregulated"))
+    cols.order = switch (legend.position,
+                         "bottom" = rev(cols.order),
+                         "right" = cols.order
+    )
+    cols = switch (legend.position,
+                 "bottom" = rev(cols),
+                 "right" = cols.order
+    )
+    if(!is.null(cols.order)) data$change %<>% as.factor() %>% factor(levels = cols.order)
+
     colnames(data)[grep("cluster",colnames(data))]="cluster"
     # 将需要标记的基因放置在单独的数组
     Up <- data[data$change %in% "Upregulated",]
@@ -3162,31 +3173,33 @@ VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value =
         mapping = aes_string(x = "avg_logFC", 
                              y = paste0("log10_",cut_off[1]),
                              fill = "change"))+
-                geom_point(alpha=alpha, size=size,...)
+       geom_point(mapping = aes_string(color = "change"), alpha=alpha, size=size,...)
         # 辅助线
     p = p + geom_vline(xintercept=c(-cut_off_logFC,cut_off_logFC),lty=4,col="black",lwd=0.8)
-    p = p + geom_hline(yintercept = -log10(cut_off_value),lty=4,col="black",lwd=0.8) +
+    p = p + geom_hline(yintercept = -log10(cut_off_value),lty=4,col="black",lwd=0.8)
         
         # 坐标轴
+    p = p + theme_bw()+
         labs(x="log2(fold change)",
              y= paste("-log10 (",ifelse(cut_off[1] == "p_val_adj", "adjusted p-value","p-value"),")"))+
         
         # 图例
         theme(plot.title = element_text(hjust = 0.5), 
               axis.title=element_text(size=12),
-              legend.position="right", 
+              legend.position=legend.position, 
               legend.title = element_blank(),
               legend.text = element_text(size = legend.size),
         )
-    names(cols) = c('Downregulated','Stable','Upregulated')
+    if(!is.null(cols.order)) names(cols) = cols.order
+    
     p = p + ggrepel::geom_text_repel(data = data[c(Down_gene_index, Up_gene_index),], 
                                      aes(label = gene),
-                                     size = 3,box.padding = unit(0.5, "lines"),
+                                     size = size,box.padding = unit(0.5, "lines"),
                                      point.padding = unit(0.8, "lines"), 
                                      segment.color = "black", 
-                                     show.legend = FALSE)+
-        
-            scale_fill_manual(values=cols[unique(data$change)])
+                                     show.legend = FALSE)
+    #p = p + scale_colour_manual(values=cols[unique(data$change)])
+    p = p + scale_fill_manual(values=cols[unique(data$change)])
     return(p)
 }
 
