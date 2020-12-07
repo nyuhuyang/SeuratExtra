@@ -1464,7 +1464,7 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
                          pathway.name = "Hallmark",padj = 0.25, pval=0.05,
                          do.return = F,return.raw = F,font.main = 18,
                          verbose=T,save.path = NULL, file.name = NULL,
-                         width=10, height=7,hjust=0.5,...){
+                         units = "in",width=10, height=7,hjust=0.5,...){
     
     clusters = unique(as.character(stats$cluster))
     message("Calculate fgsea for each cluster.")
@@ -1487,6 +1487,7 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
         Progress(i, length(clusters))
     }
     df_fgseaRes <- data.table::rbindlist(fgseaRes) %>% as.data.frame()
+    if(nrow(df_fgseaRes) == 0) stop("No significant pathway! Try higher p-value!")
     df_fgseaRes = df_fgseaRes[!is.na(df_fgseaRes[, "pathway"]),]
     df_fgseaRes[," -log10(pval)"] = -log10(df_fgseaRes$pval)
     df_fgseaRes[," -log10(padj)"] = -log10(df_fgseaRes$padj)
