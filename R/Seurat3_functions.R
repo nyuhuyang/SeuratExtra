@@ -7,6 +7,9 @@ library(ggsci)
 library(gplots)
 library(Matrix)
 library(qlcMatrix)
+library(cowplot)
+library(cowplot)
+
 # Set a default value if an object is nullf
 #
 # @param lhs An object to set if it's null
@@ -62,31 +65,30 @@ library(qlcMatrix)
 #                        colors = singler_colors[3:26])
 .AddMetaColor <- function(mat, colors){
     if(class(mat) != "data.frame") mat = as.data.frame(mat)
-    mat$cell.names = rownames(mat)
+    #mat$cell.names = rownames(mat)
     if(class(mat[,1]) == "factor") mat[,1] = droplevels(mat[,1])
-    mat$index <- as.numeric(as.factor(mat[,1]))
-    if(length(colors)<length(unique(mat$index))) {
+    #mat$index <- as.numeric(as.factor(mat[,1]))
+    if(length(colors) < length(unique(mat[,1]))) {
         stop(paste("Not enough colors! Provide at least", 
-                   length(unique(mat$index)),"different colors"))}
-    newMetaData = data.frame(colors[1:length(unique(mat$index))],
-                           "index" = 1:length(unique(mat$index)))
-    mat_colors <- dplyr::full_join(mat, newMetaData, by = "index")
-    # remove NA color if there is any
-    mat_colors <- mat_colors[(mat_colors$cell.names %in% rownames(mat)),]
-    rownames(mat_colors) = mat_colors$cell.names
-    newMetaData <- data.frame(as.character(mat_colors$colors),
-                              stringsAsFactors =F,
-                              row.names = mat_colors$cell.names)
-    colnames(newMetaData)[1] = paste(colnames(mat)[1],"colors",sep =".")
-    
-    return(newMetaData)
+            length(unique(mat[,1])),"different colors"))
+        } else 
+    if(length(colors) > length(unique(mat[,1]))) {
+        colors = colors[1:length(unique(mat[,1]))]
+        }
+    if(is.null(names(colors))) names(colors) = levels(as.factor(mat[,1]))
+    mat$colors = plyr::mapvalues(mat[,1], from = names(colors),to = colors)
+    colnames(mat)[2] = paste0(colnames(mat)[1],".", colnames(mat)[2])
+   
+     # remove non-color if there is any
+    mat[!(mat$cell_types.colors %in% colors),2] = NA
+    return(mat)
 }
 
 
 #' AddMetaColor: convert one MetaData label into color scheme and store into MetaData
 #' @object seurat object
 #' @label colname in metadata
-#' @colors vector of hex colors
+#' @colors vector of hex colors, same format as the result of ExtractMetaColor(object)
 # MCL <- AddMetaColor(object = MCL, label= "singler1sub", colors = Singler.colors)
 AddMetaColor<- function(object, label = NULL, colors = NULL){
     
@@ -480,7 +482,7 @@ df2list <- function(df){
 #' @param cells specify the cells
 #' @param group.colors hex color character vector matching to group.by
 #' @param colors hex color character vector for heatmap
-#example   DoHeatmap.1(SSCs,top,Top_n = 15, 
+#example   DoHeatmap.1(object,top,Top_n = 15, 
 #                   group.order = major_cells,ident.use = "all cell types",
 #                   group.label.rot = T,cex.row = 5,remove.key =T)
 #
@@ -545,25 +547,33 @@ DoHeatmap.1 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
 #' @param cells specify the cells
 #' @param group.by modify the group.by, when length(group.by) >1,
 #' instead of adding additional heatmap, produce additonal annotation bar(s) on top of heatmap, 
-#' @param group.colors hex color character vector matching to group.by
-#' @param colors hex color character vector for heatmap
+#' @param group1.colors hex color character vector matching to group.by[1]
 #' @param group2.colors hex color character vector matching to group.by[2]
+#' @param colors hex color character vector for heatmap, default is Seurat::PurpleAndYellow(), or ggsci::pal_gsea()(12)
 #' @param position gene name position
-
+#' @param nrow pass to wrap_plots
+#' @param ncol pass to wrap_plots
+#' @param design pass to wrap_plots
 DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL,
-                        no.legend =F,unique.name= T, Top_n = 10, 
-                        group.by = c("X4clusters","orig.ident"),group.bar = TRUE, group.colors = NULL, 
-                        group2.colors=Singler.colors, disp.min = -2.5, disp.max = NULL, slot = "scale.data",
+                        no.legend =F,unique.name= T, 
+                        group.by = c("X4clusters","orig.ident"),
+                        group.bar = TRUE, group1.colors = Singler.colors, 
+                        group2.colors=Singler.colors, colors = Seurat::PurpleAndYellow(),
+                        disp.min = -2.5, disp.max = NULL, slot = "scale.data",
                         assay = NULL, label = TRUE, size = 5.5, hjust = 0, angle = 45,
                         raster = TRUE, draw.lines = TRUE, lines.width = NULL, group.bar.height = 0.02,
-                        combine = TRUE,title = "",title.size = 14,do.print = FALSE,pal_gsea = F,
+                        combine = TRUE,title = "",title.size = 14,do.print = FALSE,
                         position = "right",save.path = NULL,file.name = NULL,
-                        cex.row=12,legend.size = NULL,units="in", width=10, height=7,res=600,...){
+                        cex.row=12,legend.size = 12,
+                        nrow = 5, ncol = 6, design = c(patchwork::area(1, 1, 5, 5),
+                                                       patchwork::area(3, 6, 3, 6)),
+                        units="in", width=10, height=7,res=600,...){
         if(is.null(file.name)){
-                v <- UniqueName(object = object, fileName = deparse(substitute(object)), unique.name = unique.name)
+                v <- UniqueName(object = object, fileName = deparse(substitute(object)), 
+                                unique.name = T)
                 v = paste0(v,"_",FindIdentLabel(object))
                 if(!no.legend) v = paste0(v, "_Legend")
-                file.name = paste0("Heatmap_top",Top_n,"_",v,".jpeg")
+                file.name = paste0("Heatmap2_top",v,".jpeg")
         }
         
         if(class(title) != "character") stop("Title is incorrect")
@@ -575,8 +585,15 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                         top_n(Top_n, avg_logFC)
                 features = c(base::as.character(top$gene),features)
         }
-        if((length(group.colors) != length(unique(Idents(object)))) &
-           !is.null(group.colors) ) stop("length of colors do not match!")
+        
+        for (i in 1:length(x = group.by)) {
+                len = length(unique(object@meta.data[,group.by[i]]))
+                if(len <= length(group1.colors)) {
+                        assign(paste0("group",i,".colors"),
+                               get(paste0("group",i,".colors"))[1:len])
+                } else stop(paste("Need",len, "colors for",group.by[i]))
+        }
+                
         cells <- cells %||% colnames(x = object)
         if (is.numeric(x = cells)) {
                 cells <- colnames(x = object)[cells]
@@ -639,6 +656,7 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
         }
         lgroup <- length(levels(group.use))
         plot <- Seurat:::SingleRasterMap(data = data.group, raster = raster, 
+                                         colors = colors,
                                          disp.min = disp.min, disp.max = disp.max, feature.order = features, 
                                          cell.order = names(x = sort(x = group.use)), group.by = group.use)
         plot <- plot + theme(line = element_blank())
@@ -647,17 +665,18 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                         theme(plot.title = element_text(size=title.size, hjust = 0.5,face="plain"))
         }
         plot = plot + scale_y_discrete(position = position)
-        if(pal_gsea) plot = plot + scale_fill_gradientn(colors = ggsci::pal_gsea()(12))
-        #if(!is.null(colors)) plot = plot + scale_fill_gradientn(colors = colors)
         plot = plot + theme(axis.text.y = element_text(size = cex.row))
-        
+        if(!no.legend) {
+                plot = plot + theme(legend.text = element_text(size = legend.size),
+                                      legend.title = element_text(size = legend.size*1.2))
+        }
         if(no.legend) plot = plot + NoLegend()
         if (group.bar) {
                 default.colors <- c(scales::hue_pal()(length(x = levels(x = group.use))))
-                if (!is.null(x = names(x = group.colors))) {
-                        cols <- unname(obj = group.colors[levels(x = group.use)])
+                if (!is.null(x = names(x = group1.colors))) {
+                        cols <- unname(obj = group1.colors[levels(x = group.use)])
                 } else {
-                        cols <- group.colors[1:length(x = levels(x = group.use))] %||% 
+                        cols <- group1.colors[1:length(x = levels(x = group.use))] %||% 
                                 default.colors
                 }
                 if (any(is.na(x = cols))) {
@@ -683,56 +702,71 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                         group.use2[placeholder.cells] <- na.group
                         cols <- c(cols, "#FFFFFF")
                 }
-                pbuild <- ggplot_build(plot = plot)
                 names(x = cols) <- levels(x = group.use2)
-                y.range <- diff(x = pbuild$layout$panel_params[[1]]$y.range)
-                y.pos <- max(pbuild$layout$panel_params[[1]]$y.range) + 
-                        y.range * 0.015
-                y.max <- y.pos + group.bar.height * y.range
-                x.min <- min(pbuild$layout$panel_params[[1]]$x.range) + 
-                        0.1
-                x.max <- max(pbuild$layout$panel_params[[1]]$x.range) - 
-                        0.1
+                
+                # extract coordicates of ggplot2
+                #' @export x.min,x.max,y.min,y.max, coordinate values anti-clockwise from left bottom
+                Extract_coord <- function(g){
+                        pbuild <- ggplot_build(plot = g)
+                        x.min <- min(pbuild$layout$panel_params[[1]]$x.range)
+                        x.max <- max(pbuild$layout$panel_params[[1]]$x.range)
+                        y.min <- min(pbuild$layout$panel_params[[1]]$y.range)
+                        y.max <- max(pbuild$layout$panel_params[[1]]$y.range)
+                        
+                        return(list("x.min" = x.min, "x.max" = x.max, "y.min" = y.min,"y.max" = y.max))
+                }
+                coord <- Extract_coord(plot)
+                y.range = coord$y.max - coord$y.min
+                y.pos = coord$y.max + y.range * 0.015
+                coord$y.max = y.pos + group.bar.height * y.range
+                coord$x.min <- coord$x.min + 0.1
+                coord$x.max <- coord$x.max - 0.1
+                
                 plot <- plot + 
                         annotation_raster(raster = t(x = cols[group.use2]), 
-                                          xmin = x.min, xmax = x.max, ymin = y.pos, ymax = y.max) + 
-                        coord_cartesian(ylim = c(0, y.max), clip = "off") + 
+                                          xmin = coord$x.min, xmax = coord$x.max, 
+                                          ymin = y.pos, ymax = coord$y.max) + 
+                        coord_cartesian(ylim = c(0, coord$y.max), clip = "off") + 
                         scale_color_manual(values = cols)
                 
                 for (i in 2:ncol(x = groups.use)) {
                         group.use3 = groups.use[names(group.use2),i]
+                        if (!is.factor(x = group.use3)) group.use3 %<>% factor()
                         group.use3 %<>% droplevels()
-                        if(length(unique(group.use3)) > length(group2.colors)) stop("Not enough color!")
-                        group2_colors = group2.colors[1:length(unique(group.use3))]
-                        if (draw.lines) group2_colors = c(group2_colors[1:(length(group2_colors)-1)],
+                        if(length(levels(group.use3)) > length(group2.colors)) stop("Not enough color!")
+                        group3_colors = group2.colors[1:length(unique(group.use3))]
+                        if (draw.lines) group3_colors = c(group3_colors[1:(length(group3_colors)-1)],
                                                           "#FFFFFF")
-                        names(x = group2_colors) <- levels(x = group.use3)
-                        ymin = y.max+y.range * 0.01
-                        ymax = ymin + group.bar.height * y.range
+                        names(x = group3_colors) <- levels(x = group.use3)
+                        coord <- Extract_coord(plot)
+                        
+                        bar.ymin = coord$y.max+ y.range * 0.01
+                        bar.ymax = bar.ymin + group.bar.height * y.range
                         
                         plot <- plot + 
-                                annotation_raster(raster = t(x = group2_colors[group.use3]), 
-                                                  xmin = x.min, xmax = x.max, 
-                                                  ymin = ymin, 
-                                                  ymax = ymax)+
-                                coord_cartesian(ylim = c(0, ymax), clip = "off")
+                                annotation_raster(raster = t(x = group3_colors[group.use3]), 
+                                                  xmin = coord$x.min, xmax = coord$x.max, 
+                                                  ymin = bar.ymin, 
+                                                  ymax = bar.ymax)+
+                                coord_cartesian(ylim = c(0, bar.ymax), clip = "off")
                         if(!no.legend){
                                 df <- as.data.frame(table(group.use3))
-                                df$color = group2_colors[df$group.use3]
+                                df$color = group3_colors[df$group.use3]
                                 colnames(df)[1] = group.by[i]
-                                g <- ggplot(df,aes_string(x = "Freq", fill = group.by[i]))+ 
-                                        geom_bar() + scale_fill_manual(values=df$color)
-                                legend <- cowplot::get_legend(g)
+                                legend <- ggplot(df,aes_string(x = "Freq", fill = group.by[i]))+ 
+                                        geom_bar() + scale_fill_manual(values=df$color)+ 
+                                        theme(legend.text = element_text(size = legend.size),
+                                              legend.title = element_text(size = legend.size*1.2))
+                                legend <- cowplot::get_legend(legend)
                                 legend <- ggpubr::as_ggplot(legend)
-                                design <- "AAA#B
-                                           AAA#B
-                                           AAA#B"
-                                plot = patchwork::wrap_plots(plot,legend, design = design)
+
+                                plot <- patchwork::wrap_plots(plot,legend, ncol = ncol, nrow = nrow,design = design)
                         }
                 }
 
                 if (label) {
-                        x.max <- max(pbuild$layout$panel_params[[1]]$x.range)
+                        y.max = coord$y.max
+                        x.max = coord$x.max
                         x.divs <- pbuild$layout$panel_params[[1]]$x.major %||% 
                                 attr(x = pbuild$layout$panel_params[[1]]$x$get_breaks(), 
                                      which = "pos")
@@ -771,19 +805,26 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
 #' DoHeatmap.matrix, generates Seurat like heatmap using matrix
 #' @param data.use expression data.frame
 #' @param group.by factor/character vector of column group labels
-#' @param group.colors hex color character vector matching to group.by
-#' @param colors hex color character vector for heatmap
+#' @param group1.colors hex color character vector matching to group.by[1]
+#' @param group2.colors hex color character vector matching to group.by[2]
+#' @param colors hex color character vector for heatmap, default is Seurat::PurpleAndYellow(), or ggsci::pal_gsea()(12)
 #' @param save.path folder to save
 DoHeatmap.matrix <- function (data.use, features = NULL, cells = NULL, 
                               no.legend =F, group.by = "ident", group.bar = TRUE, 
                               group.colors = NULL,disp.min = -2.5, disp.max = NULL, slot = "scale.data", 
-                              assay = NULL, label = TRUE, colors = NULL, size = 5.5, hjust = 0, angle = 45, 
+                              assay = NULL, label = TRUE, colors = Seurat::PurpleAndYellow(), size = 5.5, hjust = 0, angle = 45, 
                               raster = TRUE, draw.lines = TRUE, lines.width = NULL, group.bar.height = 0.02, 
                               combine = TRUE,title = "",title.size = 14,do.print = FALSE,
                               pal_gsea = TRUE,position = "right",save.path = NULL, file.name = NULL,
-                              cex.row=12,legend.size = NULL,units="in", 
+                              unique.name= T, cex.row=12,legend.size = NULL,units="in", 
                               width=10, height=7,res=600,...) 
 {
+    if(is.null(file.name)){
+        v <- UniqueName(object = object, fileName = deparse(substitute(object)), unique.name = unique.name)
+        v = paste0(v,"_",FindIdentLabel(object))
+        if(!no.legend) v = paste0(v, "_Legend")
+        file.name = paste0("Heatmap_top",Top_n,"_",v,".jpeg")
+    }
     if(class(title) != "character") stop("Title is incorrect")
     cells <- cells %||% colnames(x = data.use)
     if (is.numeric(x = cells)) {
@@ -850,7 +891,7 @@ DoHeatmap.matrix <- function (data.use, features = NULL, cells = NULL,
                 through <- length(x = default.colors)
                 while (length(x = col.dups) > 0) {
                     pal.max <- length(x = col.dups) + through
-                    cols.extra <- hue_pal()(pal.max)[(through + 
+                    cols.extra <- scales::hue_pal()(pal.max)[(through + 
                                                           1):pal.max]
                     cols[col.dups] <- cols.extra
                     col.dups <- sort(x = unique(x = which(x = duplicated(x = substr(x = cols, 
@@ -902,7 +943,6 @@ DoHeatmap.matrix <- function (data.use, features = NULL, cells = NULL,
         plots <- patchwork::wrap_plots(plots)
     }
     plots = plots + scale_y_discrete(position = position)
-    #if(pal_gsea) plots = plots + scale_fill_gradientn(colors = ggsci::pal_gsea()(12))
     if(!is.null(colors)) plots = plots + scale_fill_gradientn(colors = colors)
     if(!is.null(title)) {
         plots = plots+ ggtitle(title)+ 
@@ -1059,11 +1099,7 @@ DotPlot.1 <- function(
                 }
         )
         data.plot <- do.call(what = 'rbind', args = data.plot)
-        if(is.function(log.data)) data.plot$avg.exp = log.data(data.plot$avg.exp+1)
-        if (!is.null(x = id.levels)) {
-                data.plot$id <- factor(x = data.plot$id, levels = id.levels)
-        }
-        
+        #if(is.function(log.data)) data.plot$avg.exp = log.data(data.plot$avg.exp+1)
         if (!is.null(x = id.levels)) {
                 data.plot$id <- factor(x = data.plot$id, levels = id.levels)
         }
@@ -1082,9 +1118,9 @@ DotPlot.1 <- function(
                         if (scale) {
                                 data.use <- scale(x = data.use)
                                 data.use <- MinMax(data = data.use, min = col.min, max = col.max)
-                        } else {
-                                data.use <- log(x = data.use)
-                        }
+                        } else if(is.function(log.data)){
+                                data.use <- log.data(x = data.use+1)
+                        } else stop("No scale and log.data is not function")
                         return(data.use)
                 }
         )
@@ -1121,7 +1157,7 @@ DotPlot.1 <- function(
                 )
         }
         color.by <- ifelse(test = split.colors, yes = 'colors', no = 'avg.exp.scaled')
-        color.by <- ifelse(test = is.function(log.data), yes = 'avg.exp', no = color.by)
+        color.by <- ifelse(test = is.function(log.data), yes = 'avg.exp.scaled', no = color.by)
         
         if (!is.na(x = scale.min)) {
                 data.plot[data.plot$pct.exp < scale.min, 'pct.exp'] <- scale.min
@@ -1151,7 +1187,7 @@ DotPlot.1 <- function(
                         x = 'Features',
                         y = ifelse(test = is.null(x = split.by), yes = 'Identity', no = 'Split Identity')
                 ) +
-                theme_cowplot()
+                cowplot::theme_cowplot()
         if (!is.null(x = feature.groups)) {
                 plot <- plot + facet_grid(
                         facets = ~feature.groups,
@@ -1260,17 +1296,18 @@ ExtractMetaColor <- function(object, group.by = NULL){
     color_index <- paste0(group.by ,".colors")
     if(!any(color_index %in% colnames(meta.data))) {
         return(gg_color_hue(length(unique(as.character(object@meta.data[,group.by])))))
-        } else {
-            label = sub("colors","",color_index)
-            label = sub("[.]$","",label)
+        } 
+    else {
+            label = sub("\\.colors","",color_index)
             meta.data = meta.data[,c(label,color_index)]
-            meta.data$index <- as.numeric(as.factor(meta.data[,1]))
-            df_colors = meta.data[!duplicated(meta.data$index),]
-            df_colors = df_colors[order(df_colors$index),]
+            #meta.data$index <- as.numeric(as.factor(meta.data[,1]))
+            df_colors = meta.data[!duplicated(meta.data[,group.by]),]
+            df_colors = df_colors[order(df_colors[,group.by]),]
         }
     if(all(is.na(df_colors[,color_index]))) df_colors[,color_index] = gg_color_hue(nrow(df_colors))
     cell.colors = base::as.character(df_colors[,color_index])
     names(cell.colors) = df_colors[,group.by]
+    cell.colors = cell.colors[order(names(cell.colors))]
     return(cell.colors)
 }
 
@@ -3599,7 +3636,8 @@ sns.RdBu_r_199 = c('#063264', '#073467', '#08366a', '#0a3b70', '#0c3d73', '#0d3f
 # maturation score colors
 my.cols.RYG <- colorRampPalette(c("#a50026", "#d73027", "#f46d43", "#fdae61", "#fee08b",
 "#ffffbf", "#d9ef8b", "#a6d96a", "#66bd63", "#1a9850", "#006837"))(11)
-sns.RdBu_r_15 = c('#175290', '#2a71b2', '#3f8ec0', '#6bacd1', '#9bc9e0', '#c2ddec', '#e0ecf3', '#f7f6f6', '#fbe5d8', '#fbccb4', '#f5aa89', '#e48066', '#d05548', '#ba2832', '#930e26')
+sns.RdBu_r_15 = c('#175290', '#2a71b2', '#3f8ec0', '#6bacd1', '#9bc9e0', '#c2ddec', '#e0ecf3',
+                  '#f7f6f6', '#fbe5d8', '#fbccb4', '#f5aa89', '#e48066', '#d05548', '#ba2832', '#930e26')
 #' produce unique string baes on Seurat object's meta data
 UniqueName <- function(object, fileName = NULL, unique.name = T){
     if(is.logical(unique.name)){
