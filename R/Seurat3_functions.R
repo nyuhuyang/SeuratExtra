@@ -588,7 +588,8 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
         
         for (i in 1:length(x = group.by)) {
                 len = length(unique(object@meta.data[,group.by[i]]))
-                if(len <= length(group1.colors)) {
+                assign("group.colors.len",length(get(paste0("group",i,".colors"))))
+                if(len <= group.colors.len) {
                         assign(paste0("group",i,".colors"),
                                get(paste0("group",i,".colors"))[1:len])
                 } else stop(paste("Need",len, "colors for",group.by[i]))
@@ -659,17 +660,19 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                                          colors = colors,
                                          disp.min = disp.min, disp.max = disp.max, feature.order = features, 
                                          cell.order = names(x = sort(x = group.use)), group.by = group.use)
+        if(!no.legend) {
+                plot = plot + guides(color = guide_legend(override.aes = list(shape = 15,alpha=1,size = legend.size*0.8)))+
+                        theme(legend.text = element_text(size = legend.size),
+                              legend.title = element_text(size = legend.size*1.2))
+                }
         plot <- plot + theme(line = element_blank())
         if(!is.null(title)) {
                 plot = plot+ ggtitle(title)+
                         theme(plot.title = element_text(size=title.size, hjust = 0.5,face="plain"))
         }
         plot = plot + scale_y_discrete(position = position)
-        plot = plot + theme(axis.text.y = element_text(size = cex.row))
-        if(!no.legend) {
-                plot = plot + theme(legend.text = element_text(size = legend.size),
-                                      legend.title = element_text(size = legend.size*1.2))
-        }
+        plot = plot + theme(axis.text.y = element_text(size = cex.row,colour = "black"))
+
         if(no.legend) plot = plot + NoLegend()
         if (group.bar) {
                 default.colors <- c(scales::hue_pal()(length(x = levels(x = group.use))))
@@ -3209,67 +3212,60 @@ PCAPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size = 
 
 
 #' prepare exp and tsne file
-#' #' @param split.by split objecty by. Colname of meta.data. Set to FALSE if want to use all 
+#' @param split.by split objecty by. Colname of meta.data. Set to FALSE if want to use all 
+#' @example samples =  c("All_samples","nt", "hgg","lgg"),
+#' Rshiny_path <- "Rshiny/Malignant_Transformation/"
+#' PrepareShiny(object, samples, Rshiny_path, verbose = T)
+#' 
 PrepareShiny <- function(object, samples, Rshiny_path, split.by = "orig.ident",reduction = "tsne",
-                         verbose = F,scale =NULL, assay = NULL){
-    if(missing(object) | class(object) != "Seurat") stop("samples is not provided")
-    if(missing(samples)) stop("samples is not provided")
-    if(missing(Rshiny_path)) stop("Rshiny_path is not provided")
-    assay = DefaultAssay(object) %||% assay
-    Idents(object) <-  split.by
-    if(class(object@meta.data[,split.by]) == "factor") object@meta.data[,split.by] %<>% as.character()
-    avaible_samples <- samples %in% c("All_samples",object@meta.data[,split.by])
-    if (!all(avaible_samples))
-        stop(paste(paste(samples[!avaible_samples],collapse = " "),
-                   "are not exist in the data."))
-    max_exp <- list()
-    if("All_samples" %in% samples) {
-        single_object <- object
-    } else single_object <- subset(object, idents = samples)
-    if(!is.null(scale)){
-        max_exp = qlcMatrix::rowMax(single_object[[assay]]@data) %>% as.vector()
+                         verbose = F, assay = NULL){
+        if(missing(object) | class(object) != "Seurat") stop("samples is not provided")
+        if(missing(samples)) stop("samples is not provided")
+        if(missing(Rshiny_path)) stop("Rshiny_path is not provided")
+        assay = DefaultAssay(object) %||% assay
+        Idents(object) <-  split.by
+        avaible_samples <- samples %in% c("All_samples",object@meta.data[,split.by])
+        if (!all(avaible_samples))
+                stop(paste(paste(samples[!avaible_samples],collapse = " "),
+                           "are not exist in the data."))
+        object <- subset(object, idents = samples[-which("All_samples" %in% samples)])
+        
+        # prepare max_exp
+        max_exp = rowMax(object[[assay]]@data) %>% as.vector()
         max_exp = max_exp/log(2)
-        names(max_exp) = rownames(single_object)
-    }
-    
-    exp <- list()
-    tsne <- list()
-    for (i in seq_along(samples)){
-        sample <- samples[i]
-        if(sample == "All_samples") {
-            single_object <- object
-        } else {cells <- colnames(object)[object@meta.data[,split.by] %in% sample]
-                single_object <- subset(object, cells= cells)
-        }
-        #============== exp csv===============
-        data <- GetAssayData(single_object)
-        data <- as(data, "sparseMatrix")
-        data = data/log(2)
-        #bad <- rowMax(data) == 0
-        #data = data[!bad,]
-        if(!is.null(scale)){
-            range <- rowMax(data) - rowMin(data) # range <- apply(data,1,max) - apply(data,1,min)
-            data = sweep(data, 1, range,"/")*scale
-        }
+        names(max_exp) = rownames(object)
         
-        if(verbose) {
-            print(sample)
-            print(format(object.size(data),units="MB"))
+        exp <- list()
+        tsne <- list()
+        for (i in seq_along(samples)){
+                sample <- samples[i]
+                if(sample == "All_samples") {
+                        single_object <- object
+                } else single_object <- subset(object, idents = sample)
+                #============== exp csv===============
+                data <- GetAssayData(single_object)
+                data <- as(data, "sparseMatrix")
+                data = data/log(2)
+                #bad <- rowMax(data) == 0
+                #data = data[!bad,]
+                
+                if(verbose) {
+                        print(sample)
+                        print(format(object.size(data),units="MB"))
+                }
+                exp[[i]] = data
+                #============== tsne csv===============
+                tsne[[i]] = Embeddings(single_object, reduction = reduction)
+                
+                svMisc::progress(i/length(samples)*100)
         }
-        exp[[i]] = data
-        #============== tsne csv===============
-        tsne[[i]] = Embeddings(single_object, reduction = reduction)
+        names(exp) = samples
+        names(tsne) = samples
         
-        svMisc::progress(i/length(samples)*100)
-    }
-    names(exp) = samples
-    names(tsne) = samples
-    shiny_data_path <- paste0(Rshiny_path, "data/")
-    if(!dir.exists(shiny_data_path)) dir.create(shiny_data_path, recursive = T)
-    if(!is.null(scale)){
-        save(exp,tsne,max_exp, file = paste0(shiny_data_path,basename(Rshiny_path),".Rda"))
-    } else save(exp,tsne, file = paste0(shiny_data_path,basename(Rshiny_path),".Rda"))
-    
+        all_genes = sort(rownames(object[[assay]]@data))
+        shiny_data_path <- paste0(Rshiny_path, "data/")
+        if(!dir.exists(shiny_data_path)) dir.create(shiny_data_path, recursive = T)
+        save(exp,tsne,max_exp,all_genes, file = paste0(shiny_data_path,basename(Rshiny_path),".Rda"))
 }
 
 
