@@ -2062,7 +2062,7 @@ FindMarkers.UMI <- function (object, ident.1 = NULL, ident.2 = NULL, group.by = 
         'scale.data' = GetAssayData(object = object[[assay]], slot = "counts"),
         numeric()
     )
-    de.results <- FindMarkers(
+    de.results <- FindMarkers.Assay(
         object = data.use,
         slot = data.slot,
         counts = counts,
@@ -2090,7 +2090,7 @@ FindMarkers.UMI <- function (object, ident.1 = NULL, ident.2 = NULL, group.by = 
             n = nrow(x = object)
         )
     }
-    de.results$avg_logFC = log2(exp(1)) * de.results$avg_logFC
+    #de.results$avg_logFC = log2(exp(1)) * de.results$avg_logFC
     if(slot == "data"){
         avg_UMI.1 <- Matrix::rowMeans(expm1(x = data.use[, ident.1]))
         avg_UMI.2 <- Matrix::rowMeans(expm1(x = data.use[, ident.2]))
