@@ -1711,8 +1711,10 @@ FgseaBarplot <- function(stats=res, pathways=hallmark, nperm=1000,cluster = 1,
 }
 
 #' FgseaDotPlot generate Dot plot using findmarker results based on FGSEA
-#' @param stats findmarker results
+#' @param stats Seurat findmarker results, data frame with c("gene","avg_logFC","clusters") columns
 #' @param pathways pathway list
+#' @param rm.na TRUE/FALSE, remove NA results from fgsea results
+#' @param cols dot color specturm
 #' @param Rowv determines if and how the row dendrogram should be reordered. 
 #' By default, NULL or FALSE, then no dendrogram is computed and no reordering is done.
 #' If a vector of integers, then dendrogram is computed and reordered based on the order of the vector.
@@ -1722,6 +1724,7 @@ FgseaBarplot <- function(stats=res, pathways=hallmark, nperm=1000,cluster = 1,
 #' @param padj padj cut off
 #' @param pval pval cut off
 #' @param order.yaxis.by c(1,"pval") means order y axis by pval in cluster 1
+#' @param order.yaxis specify order of y axis
 #' @param order.xaxis specify order of x axis
 #' @param do.return return fgsea data frame
 #' @param return.raw return fgsea raw data
@@ -1729,10 +1732,15 @@ FgseaBarplot <- function(stats=res, pathways=hallmark, nperm=1000,cluster = 1,
 #' @param ... ggballoonplot param
 #' @example FgseaDotPlot(stats=res, pathways=hallmark,title = "each B_MCL clusters")
 FgseaDotPlot <- function(stats=results, pathways=NULL,
-                         size = "-log10(pval)", Rowv = NULL,Colv = NULL,
+                         size = " -log10(pval)", 
                          font.ytickslab = 15,
-                         fill = "NES", title="", order.yaxis.by = c(1,"pval"),
-                         order.xaxis = NULL,decreasing = T,
+                         fill = "NES", title="", 
+                         cols = pal_gsea()(12),
+                         rm.na = T,
+                         order.yaxis.by = c(1,"pval"),decreasing = T,
+                         Rowv = FALSE,Colv = FALSE,
+                         order.yaxis = NULL,
+                         order.xaxis = NULL,
                          pathway.name = "Hallmark",padj = 0.25, pval=0.05,
                          do.return = F,return.raw = F,font.main = 18,
                          verbose=T,save.path = NULL, file.name = NULL,
@@ -1747,41 +1755,48 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
         fgseaRes[[i]] <- fgseaMultilevel(pathways=pathways, stats=geneRank)
         fgseaRes[[i]] = as.data.frame(fgseaRes[[i]])
         fgseaRes[[i]] = fgseaRes[[i]][,c("pathway","pval","padj","NES")]
-        if(clusters[i] == order.yaxis.by[1]) {
+        if(clusters[i] == order.yaxis.by[1] & is.null(order.yaxis)) {
             order.yaxis = fgseaRes[[i]][order(fgseaRes[[i]][,order.yaxis.by[2]],
                                               decreasing = decreasing), "pathway"]
         }
-        if(!is.null(pval)) fgseaRes[[i]] = fgseaRes[[i]][fgseaRes[[i]]$pval < pval,]
-        if(!is.null(padj)) fgseaRes[[i]] = fgseaRes[[i]][fgseaRes[[i]]$padj < padj,]
+        if(!is.null(pval)) fgseaRes[[i]][fgseaRes[[i]]$pval < pval,fill] = NA
+        if(!is.null(padj)) fgseaRes[[i]][fgseaRes[[i]]$padj < padj,fill] = NA
+        if(!rm.na) fgseaRes[[i]] = fgseaRes[[i]][complete.cases(fgseaRes[[i]]),]
         if(nrow(fgseaRes[[i]]) > 0 ) {
             fgseaRes[[i]]$cluster = clusters[i]
-        } else fgseaRes[[i]] =NULL
+        } else fgseaRes[[i]] =NA
         Progress(i, length(clusters))
     }
     df_fgseaRes <- data.table::rbindlist(fgseaRes) %>% as.data.frame()
     if(nrow(df_fgseaRes) == 0) stop("No significant pathway! Try higher p-value!")
-    df_fgseaRes = df_fgseaRes[!is.na(df_fgseaRes[, "pathway"]),]
+    if(rm.na) df_fgseaRes = df_fgseaRes[!is.na(df_fgseaRes[, "pathway"]),]
     df_fgseaRes[," -log10(pval)"] = -log10(df_fgseaRes$pval)
     df_fgseaRes[," -log10(padj)"] = -log10(df_fgseaRes$padj)
     if(verbose) print(round(dim(df_fgseaRes)/length(clusters)))
+    mtx_fgseaRes <- df_fgseaRes[,c("pathway","NES","cluster")]
+    mtx_fgseaRes %<>% tidyr::spread(cluster,NES)
+    rownames(mtx_fgseaRes) = mtx_fgseaRes[,"pathway"]
+    mtx_fgseaRes[is.na(mtx_fgseaRes)] = 0
     
     if(isTRUE(Rowv) | isTRUE(Colv)) {
-        mtx_fgseaRes <- df_fgseaRes[,c("pathway","NES","cluster")]
-        mtx_fgseaRes %<>% tidyr::spread(cluster,NES)
-        rownames(mtx_fgseaRes) = mtx_fgseaRes[,"pathway"]
         mtx_fgseaRes = mtx_fgseaRes[,-grep("pathway",colnames(mtx_fgseaRes))]
         mtx_fgseaRes %<>% as.matrix()
         mtx_fgseaRes[is.na(mtx_fgseaRes)] = 0
     }
-    if(isTRUE(Rowv)) {
-        hcr <- hclust(as.dist(1-cor(t(mtx_fgseaRes), method="spearman")),
-                      method="ward.D2")
-        ddr <- as.dendrogram(hcr)
-        rowInd <- order.dendrogram(ddr)
-        order.yaxis = rownames(mtx_fgseaRes)[rowInd]
-    } else {
-        order.yaxis = order.yaxis[order.yaxis %in% df_fgseaRes[,"pathway"]]
+    order.yaxis = order.yaxis[order.yaxis %in% rownames(mtx_fgseaRes)]
+    if(is.null(order.yaxis)){
+            if(isTRUE(Rowv)) {
+                    hcr <- hclust(as.dist(1-cor(t(mtx_fgseaRes), method="spearman")),
+                                  method="ward.D2")
+                    ddr <- as.dendrogram(hcr)
+                    rowInd <- order.dendrogram(ddr)
+                    order.yaxis = rownames(mtx_fgseaRes)[rowInd]
+            } else {
+                    order.yaxis = rownames(mtx_fgseaRes)
+                    order.yaxis = order.yaxis[order.yaxis %in% df_fgseaRes[,"pathway"]]
+            }
     }
+
     if(isTRUE(Colv)) {
         hcc <- hclust(as.dist(1-cor(mtx_fgseaRes, method="spearman")),
                       method="ward.D2")
@@ -1790,42 +1805,45 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
         order.xaxis = colnames(mtx_fgseaRes)[colInd]
     }
     df_fgseaRes[,"pathway"] %<>% as.factor
-    df_fgseaRes[,"pathway"] %<>% factor(levels = order.yaxis)
+    df_fgseaRes[,"pathway"] %<>% factor(levels = rev(order.yaxis))
     if(!is.null(order.xaxis)) {
         df_fgseaRes[,"cluster"] %<>% as.factor()
         df_fgseaRes[,"cluster"] %<>% factor(levels = order.xaxis)
         df_fgseaRes %<>% with(df_fgseaRes[order(pathway,cluster),])
     }
     # generate color pal_gsea scale based on NES range.
-    rescale_colors <- function(colors = pal_gsea(), Range = range(df_fgseaRes$NES)){
-        if(Range[1]>0) return(pal_gsea()(12)[7:12])
-        if(Range[2]<0) return(pal_gsea()(12)[1:6])
+    rescale_colors <- function(cols = cols, Range = range(df_fgseaRes$NES, na.rm = T)){
+        n = round(length(cols)/2)
+        if(Range[1]>0) return(cols[(n+1):(2*n)])
+        if(Range[2]<0) return(cols[1:n])
         if(Range[1]<0 & Range[2]>0) {
             remove <- (Range[2] +Range[1]) / (Range[2] -Range[1])
-            if(remove>0) return(pal_gsea()(12)[max(1,12*remove):12])
-            if(remove<0) return(pal_gsea()(12)[1:(12+min(-1,12*remove)+1)])
+            if(remove>0) return(cols[max(1,2*n*remove):(2*n)])
+            if(remove<0) return(cols[1:(2*n+min(-1,2*n*remove)+1)])
         }
     }
     #font.ytickslab= min(font.ytickslab,round(height*300/dim(df_fgseaRes)[1]))
-    plots <- ggballoonplot(df_fgseaRes, x = "cluster", y = "pathway",
+    plot <- ggballoonplot(df_fgseaRes, x = "cluster", y = "pathway",
                            size = size, fill = fill,
                            size.range = c(1, 5),
-                           font.ytickslab= font.ytickslab,
+                           #font.ytickslab= font.ytickslab,
                            title = title,
                            legend.title = ifelse(fill =="NES",
                                                  "Normalized\nenrichment\nscore",
                                                  NULL),
-                           xlab = "", ylab = "",...) +
-        scale_fill_gradientn(colors = rescale_colors())+ #RPMG::SHOWPAL(ggsci::pal_gsea()(12))
+                           xlab = "", ylab = "") +
+        scale_fill_gradientn(colors = rescale_colors(cols = cols,
+                                                     Range = range(df_fgseaRes[,fill], na.rm = T)))+ #RPMG::SHOWPAL(ggsci::pal_gsea()(12))
         theme(plot.title = element_text(hjust = hjust,size = font.main))
+
     if(size == "padj") plot = plot + scale_size(breaks=c(0,0.05,0.10,0.15,0.2,0.25),
                                                 labels=rev(c(0,0.05,0.10,0.15,0.2,0.25)))
     if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
     if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
     if(is.null(file.name)) file.name =  paste0("Dotplot_",title,"_",pathway.name,
-                                               "_",padj,"_",pval,".jpeg")
-    jpeg(paste0(save.path, "/", file.name),units=units, width=width, height=height,res=600)
-    print(plots)
+                                               "_",padj,"_",pval)
+    jpeg(paste0(save.path, "/", file.name,".jpeg"),units=units, width=width, height=height,res=600)
+    print(plot)
     dev.off()
     if(do.return & return.raw) {
         return(fgseaRes)
@@ -2062,7 +2080,7 @@ FindMarkers.UMI <- function (object, ident.1 = NULL, ident.2 = NULL, group.by = 
         'scale.data' = GetAssayData(object = object[[assay]], slot = "counts"),
         numeric()
     )
-    de.results <- FindMarkers.Assay(
+    de.results <- FindMarkers(
         object = data.use,
         slot = data.slot,
         counts = counts,
