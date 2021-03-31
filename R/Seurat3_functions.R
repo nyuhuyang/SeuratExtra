@@ -519,7 +519,6 @@ DoHeatmap.1 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                          lines.width = lines.width, group.bar.height = group.bar.height,
                          combine = combine)+
         scale_y_discrete(position = position)
-    if(pal_gsea) heatmap = heatmap + scale_fill_gradientn(colors = ggsci::pal_gsea()(12))
     if(!is.null(colors)) heatmap = heatmap + scale_fill_gradientn(colors = colors)
     if(!is.null(title)) {
         heatmap = heatmap+ ggtitle(title)+
@@ -2960,6 +2959,35 @@ Read10X.1 <- function(
         } else {
                 return(list_of_data)
         }
+}
+
+# RenameGenesSeurat  ------------------------------------------------------------------------------------
+# https://github.com/satijalab/seurat/issues/2617
+# Replace gene names in different slots of a Seurat object. Run this before integration. Run this before integration. It only changes obj@assays$RNA@counts, @data and @scale.data.
+RenameGenesSeurat <- function(obj , newnames) { 
+        print("Run this before integration. It only changes counts, @data and @scale.data.")
+        if("RNA" %in% names(obj@assays)){
+                RNA <- obj@assays$RNA
+                if (nrow(RNA) == length(newnames)) {
+                        if (length(RNA@counts)) RNA@counts@Dimnames[[1]]            <- newnames
+                        if (length(RNA@data)) RNA@data@Dimnames[[1]]                <- newnames
+                        #if (length(RNA@scale.data)) RNA@scale.data@Dimnames[[1]]    <- newnames
+                        if(length(RNA@meta.features)) rownames(RNA@meta.features)   <- newnames
+                } else {"Unequal gene sets: nrow(RNA) != nrow(newnames)"}
+                obj@assays$RNA <- RNA
+                }
+        if("SCT" %in% names(obj@assays)){
+                SCT <- obj@assays$SCT
+                if (nrow(SCT) == length(newnames)) {
+                        if (length(SCT@counts)) SCT@counts@Dimnames[[1]]            <- newnames
+                        if (length(SCT@data)) SCT@data@Dimnames[[1]]                <- newnames
+                        #if (length(SCT@scale.data)) SCT@scale.data@Dimnames[[1]]    <- newnames
+                        if(length(SCT@meta.features)) rownames(SCT@meta.features)   <- newnames
+                } else {"Unequal gene sets: nrow(SCT) != nrow(newnames)"}
+                obj@assays$SCT <- SCT
+        }
+        print("need to re-run FindVariableFeatures() and ScaleData() if necessary")
+        return(obj)
 }
 
 
