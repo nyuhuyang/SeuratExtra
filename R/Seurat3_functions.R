@@ -970,7 +970,8 @@ DoHeatmap.matrix <- function (data.use, features = NULL, cells = NULL,
 #' Allow log expression
 
 #' @param log.data = log2, 
-#' @param cluster.features = FALSE, cluster features
+#' @param cluster.idents = FALSE, cluster columns (idents)
+#' @param cluster.features = FALSE, cluster rows (features)
 #' @param exp.min = NA, Set minimal expression level, 
 #' @param exp.max = NA, Set maximal expression level 
 #' @param n.breaks = NULL, number of breaks for expression color bar
@@ -1383,7 +1384,8 @@ FeaturePlot.1 <- function (object, features, dims = c(1, 2), cells = NULL,
     if(is.null(file.name)){
         file.name <- UniqueName(object,fileName = deparse(substitute(object)),unique.name = unique.name)
         file.name = paste0(file.name,"_",FindIdentLabel(object),
-                         ifelse(!is.null(split.by), yes = paste0("_",split.by), no =""))
+                         ifelse(!is.null(split.by), yes = paste0("_",split.by), no =""),
+                         ".jpeg")
     }
     no.right <- theme(axis.line.y.right = element_blank(), axis.ticks.y.right = element_blank(), 
                       axis.text.y.right = element_blank(), axis.title.y.right = element_text(face = "bold",size = 14, margin = margin(r = 7)))
@@ -1732,6 +1734,7 @@ FgseaBarplot <- function(stats=res, pathways=hallmark, nperm=1000,cluster = 1,
 #' @example FgseaDotPlot(stats=res, pathways=hallmark,title = "each B_MCL clusters")
 FgseaDotPlot <- function(stats=results, pathways=NULL,
                          size = " -log10(pval)", 
+                         scale.by =c('size','radius')[1],
                          font.ytickslab = 15,
                          fill = "NES", title="", 
                          cols = pal_gsea()(12),
@@ -1760,7 +1763,7 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
         }
         if(!is.null(pval)) fgseaRes[[i]][fgseaRes[[i]]$pval < pval,fill] = NA
         if(!is.null(padj)) fgseaRes[[i]][fgseaRes[[i]]$padj < padj,fill] = NA
-        if(!rm.na) fgseaRes[[i]] = fgseaRes[[i]][complete.cases(fgseaRes[[i]]),]
+        if(rm.na) fgseaRes[[i]] = fgseaRes[[i]][complete.cases(fgseaRes[[i]]),]
         if(nrow(fgseaRes[[i]]) > 0 ) {
             fgseaRes[[i]]$cluster = clusters[i]
         } else fgseaRes[[i]] =NA
@@ -1768,7 +1771,9 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
     }
     df_fgseaRes <- data.table::rbindlist(fgseaRes) %>% as.data.frame()
     if(nrow(df_fgseaRes) == 0) stop("No significant pathway! Try higher p-value!")
-    if(rm.na) df_fgseaRes = df_fgseaRes[!is.na(df_fgseaRes[, "pathway"]),]
+    if(rm.na) {
+            df_fgseaRes = df_fgseaRes[!is.na(df_fgseaRes[, "pathway"]),]
+    }
     df_fgseaRes[," -log10(pval)"] = -log10(df_fgseaRes$pval)
     df_fgseaRes[," -log10(padj)"] = -log10(df_fgseaRes$padj)
     if(verbose) print(round(dim(df_fgseaRes)/length(clusters)))
@@ -1776,6 +1781,7 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
     mtx_fgseaRes %<>% tidyr::spread(cluster,NES)
     rownames(mtx_fgseaRes) = mtx_fgseaRes[,"pathway"]
     mtx_fgseaRes[is.na(mtx_fgseaRes)] = 0
+    
     
     if(isTRUE(Rowv) | isTRUE(Colv)) {
         mtx_fgseaRes = mtx_fgseaRes[,-grep("pathway",colnames(mtx_fgseaRes))]
@@ -1822,20 +1828,24 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
         }
     }
     #font.ytickslab= min(font.ytickslab,round(height*300/dim(df_fgseaRes)[1]))
-    plot <- ggballoonplot(df_fgseaRes, x = "cluster", y = "pathway",
-                           size = size, fill = fill,
-                           size.range = c(1, 5),
-                           #font.ytickslab= font.ytickslab,
-                           title = title,
-                           legend.title = ifelse(fill =="NES",
-                                                 "Normalized\nenrichment\nscore",
-                                                 NULL),
-                           xlab = "", ylab = "") +
+    scale.func <- switch(
+            EXPR = scale.by,
+            'size' = scale_size,
+            'radius' = scale_radius,
+            stop("'scale.by' must be either 'size' or 'radius'")
+    )
+    plot <- ggplot(data = df_fgseaRes, mapping = aes_string(x = "cluster", y = "pathway")) +
+            geom_point(mapping = aes_string(size = size, fill = fill),
+                       color = "black", pch=21) +
+            scale.func(range = c(1, 5)) +
+            theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+            labs(x = "",y = "")+
+            theme_bw() +
         scale_fill_gradientn(colors = rescale_colors(cols = cols,
                                                      Range = range(df_fgseaRes[,fill], na.rm = T)))+ #RPMG::SHOWPAL(ggsci::pal_gsea()(12))
         theme(plot.title = element_text(hjust = hjust,size = font.main))
 
-    if(size == "padj") plot = plot + scale_size(breaks=c(0,0.05,0.10,0.15,0.2,0.25),
+    if(size %in% c("padj", "pval")) plot = plot + scale.func(breaks=c(0,0.05,0.10,0.15,0.2,0.25),
                                                 labels=rev(c(0,0.05,0.10,0.15,0.2,0.25)))
     if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
     if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
@@ -3523,7 +3533,7 @@ VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value =
 #' @param unique.name save jpeg file with unique name
 #' @param do.return return plot
 UMAPPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size = NULL,
-                       reduction = "tsne",group.by = NULL,split.by = NULL,shape.by = NULL,
+                       reduction = "umap",group.by = NULL,split.by = NULL,shape.by = NULL,
                        order = NULL,label = FALSE,label.repel= FALSE, label.size = 4,
                        repel = TRUE,alpha = 1, text.size = 15,title.size = 15,
                        legend.size = 15,
