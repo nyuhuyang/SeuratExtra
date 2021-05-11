@@ -1,3 +1,33 @@
+# returns tests that require count data
+DEmethods_counts <- function() {
+        c("negbinom", "poisson", "DESeq2")
+}
+
+# returns tests that do not support feature pre-filtering
+DEmethods_noprefilter <- function() {
+        c("DESeq2")
+}
+
+# returns tests that support latent variables (latent.vars)
+DEmethods_latent <- function() {
+        c('negbinom', 'poisson', 'MAST', "LR")
+}
+
+# returns tests that require CheckDots
+DEmethods_checkdots <- function() {
+        c('wilcox', 'MAST', 'DESeq2')
+}
+
+# returns tests that do not use Bonferroni correction on the DE results
+DEmethods_nocorrect <- function() {
+        c('roc')
+}
+
+# returns tests that require count data
+DEmethods_counts <- function() {
+        c("negbinom", "poisson", "DESeq2")
+}
+
 #' Combine FindAllMarkers and calculate average UMI
 #' Modified Seurat::FindAllMarkers function to add average UMI for group1 (UMI.1) and group 2 (UMI.2)
 #' @param ... all paramethers are the same as Seurat::FindAllMarkers
@@ -175,6 +205,9 @@ FindAllMarkers_UMI <- function(
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Methods for Seurat-defined generics, with UMI average
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+FindMarkers_UMI <- function(object, ...) {
+        UseMethod(generic = 'FindMarkers_UMI', object = object)
+}
 
 #' @param cells.1 Vector of cell names belonging to group 1
 #' @param cells.2 Vector of cell names belonging to group 2
@@ -274,7 +307,7 @@ FindMarkers_UMI.default <- function(
         fc.results = NULL,
         ...
 ) {
-        ValidateCellGroups(
+        Seurat:::ValidateCellGroups(
                 object = object,
                 cells.1 = cells.1,
                 cells.2 = cells.2,
@@ -336,7 +369,7 @@ FindMarkers_UMI.default <- function(
                         latent.vars <- latent.vars[c(cells.1, cells.2), , drop = FALSE]
                 }
         }
-        de.results <- PerformDE(
+        de.results <- Seurat:::PerformDE(
                 object = object,
                 cells.1 = cells.1,
                 cells.2 = cells.2,
@@ -403,6 +436,7 @@ FindMarkers_UMI.Assay <- function(
         base = 2,
         ...
 ) {
+
         data.slot <- ifelse(
                 test = test.use %in% DEmethods_counts(),
                 yes = 'counts',
@@ -483,7 +517,7 @@ FindMarkers_UMI.DimReduc <- function(
                      paste(DEmethods_counts(), collapse=", "))
         }
         data <- t(x = Embeddings(object = object))
-        ValidateCellGroups(
+        Seurat:::ValidateCellGroups(
                 object = data,
                 cells.1 = cells.1,
                 cells.2 = cells.2,
@@ -517,7 +551,7 @@ FindMarkers_UMI.DimReduc <- function(
                         latent.vars <- latent.vars[c(cells.1, cells.2), , drop = FALSE]
                 }
         }
-        de.results <- PerformDE(
+        de.results <- Seurat:::PerformDE(
                 object = data,
                 cells.1 = cells.1,
                 cells.2 = cells.2,
@@ -615,7 +649,7 @@ FindMarkers_UMI.Seurat <- function(
                 data.use <- object[[reduction]]
                 cellnames.use <- rownames(data.use)
         }
-        cells <- IdentsToCells(
+        cells <- Seurat:::IdentsToCells(
                 object = object,
                 ident.1 = ident.1,
                 ident.2 = ident.2,
