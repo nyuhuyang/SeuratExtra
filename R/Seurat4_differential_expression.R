@@ -294,6 +294,7 @@ FindMarkers_UMI.default <- function(
         features = NULL,
         logfc.threshold = 0.25,
         test.use = 'wilcox',
+        p.adjust.methods = "bonferroni",
         min.pct = 0.1,
         min.diff.pct = -Inf,
         verbose = TRUE,
@@ -390,7 +391,7 @@ FindMarkers_UMI.default <- function(
                 de.results <- de.results[order(de.results$p_val, -de.results[, 1]), ]
                 de.results$p_val_adj = p.adjust(
                         p = de.results$p_val,
-                        method = "bonferroni",
+                        method = p.adjust.methods,
                         n = nrow(x = object)
                 )
         }
@@ -421,6 +422,7 @@ FindMarkers_UMI.Assay <- function(
         features = NULL,
         logfc.threshold = 0.25,
         test.use = 'wilcox',
+        p.adjust.methods = "bonferroni",
         min.pct = 0.1,
         min.diff.pct = -Inf,
         verbose = TRUE,
@@ -467,6 +469,7 @@ FindMarkers_UMI.Assay <- function(
                 cells.2 = cells.2,
                 features = features,
                 logfc.threshold = logfc.threshold,
+                p.adjust.methods = p.adjust.methods,
                 test.use = test.use,
                 min.pct = min.pct,
                 min.diff.pct = min.diff.pct,
@@ -497,6 +500,7 @@ FindMarkers_UMI.DimReduc <- function(
         features = NULL,
         logfc.threshold = 0.25,
         test.use = "wilcox",
+        p.adjust.methods = "bonferroni",
         min.pct = 0.1,
         min.diff.pct = -Inf,
         verbose = TRUE,
@@ -557,6 +561,7 @@ FindMarkers_UMI.DimReduc <- function(
                 cells.2 = cells.2,
                 features = features,
                 test.use = test.use,
+                p.adjust.methods = p.adjust.methods,
                 verbose = verbose,
                 min.cells.feature = min.cells.feature,
                 latent.vars = latent.vars,
@@ -572,7 +577,7 @@ FindMarkers_UMI.DimReduc <- function(
                 de.results <- de.results[order(de.results$p_val, -de.results$avg_diff), ]
                 de.results$p_val_adj = p.adjust(
                         p = de.results$p_val,
-                        method = "bonferroni",
+                        method = p.adjust.methods,
                         n = nrow(x = object)
                 )
         }
@@ -616,6 +621,7 @@ FindMarkers_UMI.Seurat <- function(
         features = NULL,
         logfc.threshold = 0.25,
         test.use = "wilcox",
+        p.adjust.methods = "bonferroni",
         min.pct = 0.1,
         min.diff.pct = -Inf,
         verbose = TRUE,
@@ -670,6 +676,7 @@ FindMarkers_UMI.Seurat <- function(
                 cells.2 = cells$cells.2,
                 features = features,
                 logfc.threshold = logfc.threshold,
+                p.adjust.methods = p.adjust.methods,
                 test.use = test.use,
                 min.pct = min.pct,
                 min.diff.pct = min.diff.pct,
