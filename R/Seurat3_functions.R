@@ -3268,7 +3268,8 @@ PCAPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size = 
 
 
 #' prepare exp and tsne file
-#' @param split.by split objecty by. Colname of meta.data. Set to FALSE if want to use all 
+#' @param split.by split objecty by. Colname of meta.data. Can add multiple cols,
+#' @param samples subgroup to show in plot. Use "All_samples" if want to use all cells.
 #' @example samples =  c("All_samples","nt", "hgg","lgg"),
 #' Rshiny_path <- "Rshiny/Malignant_Transformation/"
 #' PrepareShiny(object, samples, Rshiny_path, verbose = T)
@@ -3279,17 +3280,24 @@ PrepareShiny <- function(object, samples, Rshiny_path, split.by = "orig.ident",r
         if(missing(samples)) stop("samples is not provided")
         if(missing(Rshiny_path)) stop("Rshiny_path is not provided")
         assay = DefaultAssay(object) %||% assay
-        Idents(object) <-  split.by
-        avaible_samples <- samples %in% c("All_samples",object@meta.data[,split.by])
+        
+         
+        for(id in split.by) object@meta.data[,id] %<>% as.character()
+        avaible_samples <- samples %in% c("All_samples",unique(unlist(object@meta.data[,split.by])))
         if (!all(avaible_samples))
                 stop(paste(paste(samples[!avaible_samples],collapse = " "),
                            "are not exist in the data."))
-        object <- subset(object, idents = samples[-which("All_samples" %in% samples)])
+        #        Idents(object) <-  split.by
+        # object <- subset(object, idents = samples[-which("All_samples" %in% samples)])
         
         # prepare max_exp
         max_exp = rowMax(object[[assay]]@data) %>% as.vector()
         max_exp = max_exp/log(2)
         names(max_exp) = rownames(object)
+        
+        meta_data = unlist(object@meta.data[,split.by])
+        cell_meta_data = data.frame("split.by" = meta_data,
+                                    "barcodes" = rep(rownames(object@meta.data), times = length(split.by)))
         
         exp <- list()
         tsne <- list()
@@ -3297,7 +3305,11 @@ PrepareShiny <- function(object, samples, Rshiny_path, split.by = "orig.ident",r
                 sample <- samples[i]
                 if(sample == "All_samples") {
                         single_object <- object
-                } else single_object <- subset(object, idents = sample)
+                } else {
+                        cells = cell_meta_data[cell_meta_data$split.by %in% sample,"barcodes"]
+                        single_object <- subset(object, cells = cells)
+                }
+                        
                 #============== exp csv===============
                 data <- GetAssayData(single_object)
                 data <- as(data, "sparseMatrix")
