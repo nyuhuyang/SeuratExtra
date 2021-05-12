@@ -1743,10 +1743,10 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
                          Rowv = FALSE,Colv = FALSE,
                          order.yaxis = NULL,
                          order.xaxis = NULL,
-                         pathway.name = "Hallmark",padj = 0.25, pval=0.05,
+                         padj = 0.25, pval=0.05,
                          do.return = F,return.raw = F,font.main = 18,
                          verbose=T,save.path = NULL, file.name = NULL,
-                         units = "in",width=10, height=7,hjust=0.5,...){
+                         units = "in",width=10, height=7,hjust=0.5,angle=0,...){
     
     clusters = unique(as.character(stats$cluster))
     message("Calculate fgsea for each cluster.")
@@ -1761,8 +1761,8 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
             order.yaxis = fgseaRes[[i]][order(fgseaRes[[i]][,order.yaxis.by[2]],
                                               decreasing = decreasing), "pathway"]
         }
-        if(!is.null(pval)) fgseaRes[[i]][fgseaRes[[i]]$pval < pval,fill] = NA
-        if(!is.null(padj)) fgseaRes[[i]][fgseaRes[[i]]$padj < padj,fill] = NA
+        if(!is.null(pval)) fgseaRes[[i]][fgseaRes[[i]]$pval > pval,fill] = NA
+        if(!is.null(padj)) fgseaRes[[i]][fgseaRes[[i]]$padj > padj,fill] = NA
         if(rm.na) fgseaRes[[i]] = fgseaRes[[i]][complete.cases(fgseaRes[[i]]),]
         if(nrow(fgseaRes[[i]]) > 0 ) {
             fgseaRes[[i]]$cluster = clusters[i]
@@ -1838,25 +1838,29 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
             geom_point(mapping = aes_string(size = size, fill = fill),
                        color = "black", pch=21) +
             scale.func(range = c(1, 5)) +
+            ggtitle(title)+
             theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
             labs(x = "",y = "")+
             theme_bw() +
         scale_fill_gradientn(colors = rescale_colors(cols = cols,
                                                      Range = range(df_fgseaRes[,fill], na.rm = T)))+ #RPMG::SHOWPAL(ggsci::pal_gsea()(12))
-        theme(plot.title = element_text(hjust = hjust,size = font.main))
+        theme(...)
 
     if(size %in% c("padj", "pval")) plot = plot + scale.func(breaks=c(0,0.05,0.10,0.15,0.2,0.25),
                                                 labels=rev(c(0,0.05,0.10,0.15,0.2,0.25)))
     if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
     if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
-    if(is.null(file.name)) file.name =  paste0("Dotplot_",title,"_",pathway.name,
+    if(is.null(file.name)) file.name =  paste0("Dotplot_",title,"_",
                                                "_",padj,"_",pval)
     jpeg(paste0(save.path, "/", file.name,".jpeg"),units=units, width=width, height=height,res=600)
     print(plot)
     dev.off()
     if(do.return & return.raw) {
         return(fgseaRes)
-    } else if(do.return) return(df_fgseaRes)
+    } else if(do.return) {
+            df_fgseaRes = df_fgseaRes[match(order.yaxis,df_fgseaRes$pathway), ]
+            return(df_fgseaRes)
+    }
 }
 
 
