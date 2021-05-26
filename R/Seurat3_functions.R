@@ -93,7 +93,7 @@ library(cowplot)
 AddMetaColor<- function(object, label = NULL, colors = NULL){
     
     if(is.null(label)) label <- FindIdentLabel(object)
-    if(is.null(colors)) colors <- SingleR:::singler.colors
+    if(is.null(colors)) colors <- Singler.colors
     mat = object[[label]]
     colnames(mat) = get("label")
     newMetaData = .AddMetaColor(mat = mat, colors = colors)
@@ -2165,7 +2165,7 @@ FindPairMarkers <- function(object, ident.1, ident.2 = NULL, features = NULL,
             ident2 <- unique(gsub('\\_.*', '', ident.2))
         }
     }
-    if(length(ident.1) != length(ident.1)) stop("pair lenth don't match")
+    if(length(ident.1) != length(ident.2)) stop("pair lenth don't match")
     assay = DefaultAssay(object) %||% "RNA"
     gde <- list()
     for(i in 1:length(ident.1)) {
@@ -3275,7 +3275,7 @@ PCAPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size = 
 #' @param split.by split objecty by. Colname of meta.data. Can add multiple cols,
 #' @param samples subgroup to show in plot. Use "All_samples" if want to use all cells.
 #' @example samples =  c("All_samples","nt", "hgg","lgg"),
-#' Rshiny_path <- "Rshiny/Malignant_Transformation/"
+#' Rshiny_path <- "shinyApp/Malignant_Transformation/"
 #' PrepareShiny(object, samples, Rshiny_path, verbose = T)
 #' 
 PrepareShiny <- function(object, samples, Rshiny_path, split.by = "orig.ident",reduction = "tsne",
@@ -3531,7 +3531,8 @@ VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value =
     
     p = p + ggrepel::geom_text_repel(data = data[c(Down_gene_index, Up_gene_index),], 
                                      aes(label = gene),
-                                     size = size,box.padding = unit(0.5, "lines"),
+                                     size = size,
+                                     box.padding = unit(0.5, "lines"),
                                      point.padding = unit(0.8, "lines"), 
                                      segment.color = "black", 
                                      show.legend = FALSE)
