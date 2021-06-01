@@ -655,7 +655,7 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                 data.group <- rbind(data.group, na.data.group)
         }
         lgroup <- length(levels(group.use))
-        plot <- Seurat:::SingleRasterMap(data = data.group, raster = raster, 
+        plot <- SingleRasterMap(data = data.group, raster = raster, 
                                          colors = colors,
                                          disp.min = disp.min, disp.max = disp.max, feature.order = features, 
                                          cell.order = names(x = sort(x = group.use)), group.by = group.use)
@@ -1331,14 +1331,14 @@ ExtractMetaColor <- function(object, group.by = NULL){
 #' @export g plot object
 #' @export pos_genes positive shared gene list
 #' @example eulerr(T_cells_markers,shape =  "ellipse",cut_off = "avg_logFC", cut_off_value = 0.01)
-eulerr <- function(df, key = NULL, cut_off = "avg_logFC",cut_off_value = 0.05, 
+eulerr <- function(df, group.by = "cluster",key = NULL, cut_off = "avg_logFC",cut_off_value = 0.05, 
                    do.lenged = TRUE,do.return = TRUE, return.raw = FALSE,
                    do.print = FALSE,save.path = NULL,file.name =NULL,
-                   shape = c("circle", "ellipse"),units="in", width=width, height=height,res=res,...){
-        df$cluster <- as.vector(df$cluster)
-        df$gene <- as.vector(df$gene)
-        if(!is.null(key)) df <- df[(df$cluster %in% key),]
-        df_list <- split(df,df$cluster)
+                   shape = c("circle", "ellipse"),units="in", width=7, height=7,res=600,...){
+        df[,group.by] %<>% as.vector
+        df$gene %<>% as.vector()
+        if(!is.null(key)) df <- df[(df[,group.by]%in% key),]
+        df_list <- split(df,df[,group.by])
         
         if(cut_off == "avg_logFC"){
             pos_genes <- sapply(df_list, function(df) df[(df$avg_logFC > -cut_off_value),"gene"])
@@ -1348,7 +1348,9 @@ eulerr <- function(df, key = NULL, cut_off = "avg_logFC",cut_off_value = 0.05,
                 shared_genes <- lapply(df_list, function(df) df[(abs(df[,cut_off]) > cut_off_value),"gene"])
                 pos_genes <- mapply(function(x,y) unique(c(x,y)), pos_genes1, shared_genes)
         }
-        euler_df <- eulerr::euler(pos_genes,shape = shape,...)
+        pos_genes_list <- split(pos_genes, c(col(pos_genes))) %>% lapply(unique)
+        names(pos_genes_list) = colnames(pos_genes)
+        euler_df <- eulerr::euler(pos_genes_list,shape = shape,...)
         
         g <- plot(euler_df, quantities = TRUE, lty = 1:6,
                   legend = do.lenged, main = paste(cut_off," : ",cut_off_value))
@@ -3146,6 +3148,86 @@ SingleDimPlot.1 <- function (data, dims, col.by = NULL, cols = NULL, pt.size = N
     return(plot)
 }
 
+
+
+#' @importFrom utils globalVariables
+#' @importFrom ggplot2 ggproto GeomViolin
+#'
+# A single heatmap from ggplot2 using geom_raster
+#
+# @param data A matrix or data frame with data to plot
+# @param raster switch between geom_raster and geom_tile
+# @param cell.order ...
+# @param feature.order ...
+# @param cols A vector of colors to use
+# @param disp.min Minimum display value (all values below are clipped)
+# @param disp.max Maximum display value (all values above are clipped)
+# @param limits A two-length numeric vector with the limits for colors on the plot
+# @param group.by A vector to group cells by, should be one grouping identity per cell
+#
+#' @importFrom ggplot2 ggplot aes_string geom_raster scale_fill_gradient
+#' scale_fill_gradientn theme element_blank labs geom_point guides guide_legend geom_tile
+#
+SingleRasterMap <- function(
+        data,
+        raster = TRUE,
+        cell.order = NULL,
+        feature.order = NULL,
+        colors = PurpleAndYellow(),
+        disp.min = -2.5,
+        disp.max = 2.5,
+        limits = NULL,
+        group.by = NULL
+) {
+        # Melt a data frame
+        #
+        # @param x A data frame
+        #
+        # @return A molten data frame
+        #
+        Melt <- function(x) {
+                if (!is.data.frame(x = x)) {
+                        x <- as.data.frame(x = x)
+                }
+                return(data.frame(
+                        rows = rep.int(x = rownames(x = x), times = ncol(x = x)),
+                        cols = unlist(x = lapply(X = colnames(x = x), FUN = rep.int, times = nrow(x = x))),
+                        vals = unlist(x = x, use.names = FALSE)
+                ))
+        }
+        
+        data <- MinMax(data = data, min = disp.min, max = disp.max)
+        data <- Melt(x = t(x = data))
+        colnames(x = data) <- c('Feature', 'Cell', 'Expression')
+        if (!is.null(x = feature.order)) {
+                data$Feature <- factor(x = data$Feature, levels = unique(x = feature.order))
+        }
+        if (!is.null(x = cell.order)) {
+                data$Cell <- factor(x = data$Cell, levels = unique(x = cell.order))
+        }
+        if (!is.null(x = group.by)) {
+                data$Identity <- group.by[data$Cell]
+        }
+        limits <- limits %||% c(min(data$Expression), max(data$Expression))
+        if (length(x = limits) != 2 || !is.numeric(x = limits)) {
+                stop("limits' must be a two-length numeric vector")
+        }
+        my_geom <- ifelse(test = raster, yes = geom_raster, no = geom_tile)
+        plot <- ggplot(data = data) +
+                my_geom(mapping = aes_string(x = 'Cell', y = 'Feature', fill = 'Expression')) +
+                theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+                scale_fill_gradientn(limits = limits, colors = colors, na.value = "white") +
+                labs(x = NULL, y = NULL, fill = group.by %iff% 'Expression') +
+                WhiteBackground() + NoAxes(keep.text = TRUE)
+        if (!is.null(x = group.by)) {
+                plot <- plot + geom_point(
+                        mapping = aes_string(x = 'Cell', y = 'Feature', color = 'Identity'),
+                        alpha = 0
+                ) +
+                        guides(color = guide_legend(override.aes = list(alpha = 1)))
+        }
+        return(plot)
+}
 
 #' re-order seurat idents factors
 sortIdent <- function(object,numeric=F){
