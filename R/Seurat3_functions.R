@@ -822,10 +822,9 @@ DoHeatmap.matrix <- function (data.use, features = NULL, cells = NULL,
                               width=10, height=7,res=600,...) 
 {
     if(is.null(file.name)){
-        v <- UniqueName(object = object, fileName = deparse(substitute(object)), unique.name = unique.name)
-        v = paste0(v,"_",FindIdentLabel(object))
+        v <- paste0(colnames(data.use)[1:min(5,ncol(data.use))],collapse = "_")
         if(!no.legend) v = paste0(v, "_Legend")
-        file.name = paste0("Heatmap_top",Top_n,"_",v,".jpeg")
+        file.name = paste0("Heatmap_",v,"_.jpeg")
     }
     if(class(title) != "character") stop("Title is incorrect")
     cells <- cells %||% colnames(x = data.use)
@@ -1341,16 +1340,15 @@ eulerr <- function(df, group.by = "cluster",key = NULL, cut_off = "avg_logFC",cu
         df_list <- split(df,df[,group.by])
         
         if(cut_off == "avg_logFC"){
-            pos_genes <- sapply(df_list, function(df) df[(df$avg_logFC > -cut_off_value),"gene"])
+            pos_genes <- lapply(df_list, function(df) df[(df$avg_logFC > -cut_off_value),"gene"]) %>% 
+                    lapply(unique)
         }  
         if(any(cut_off %in% c("p_val","p_val_adj"))){
                 pos_genes1 <- lapply(df_list, function(df) df[(df$avg_logFC > 0),"gene"])
                 shared_genes <- lapply(df_list, function(df) df[(abs(df[,cut_off]) > cut_off_value),"gene"])
                 pos_genes <- mapply(function(x,y) unique(c(x,y)), pos_genes1, shared_genes)
         }
-        pos_genes_list <- split(pos_genes, c(col(pos_genes))) %>% lapply(unique)
-        names(pos_genes_list) = colnames(pos_genes)
-        euler_df <- eulerr::euler(pos_genes_list,shape = shape,...)
+        euler_df <- eulerr::euler(pos_genes,shape = shape,...)
         
         g <- plot(euler_df, quantities = TRUE, lty = 1:6,
                   legend = do.lenged, main = paste(cut_off," : ",cut_off_value))
