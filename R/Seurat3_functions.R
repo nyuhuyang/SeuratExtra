@@ -2787,7 +2787,9 @@ paramSweep_v4 <- function (seu, PCs = 1:10, sct = FALSE)
 #' @param do.return TRUE/FALSE
 #' @param continuous.label NULL/continuous label #http://software.broadinstitute.org/gsea/doc/GSEAUserGuideFrame.html?_Phenotype_Labels
 #' @example PrepareGSEA(object, k = 50, continuous.label = major_cells)
-PrepareGSEA <- function(object, k = 1, do.return = FALSE, continuous.label = NULL,...){
+PrepareGSEA <- function(object, k = 1, do.return = FALSE, continuous.label = NULL,
+                        file.name = NULL,
+                        Mouse2Human = c("toupper","biomaRt")[1],...){
     
     set.seed(201)
     ident= FindIdentLabel(object)[1]
@@ -2845,23 +2847,26 @@ PrepareGSEA <- function(object, k = 1, do.return = FALSE, continuous.label = NUL
     
     if(rownames(GSEA_expr)[1] == 
         Hmisc::capitalize(tolower(rownames(GSEA_expr)[1]))){
-        print("#====Replace gene names ======")
-        rownames.GSEA_expr = rownames(GSEA_expr)
-        human = biomaRt::useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-        mouse = biomaRt::useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+            if(Mouse2Human == "biomaRt"){
+                    print("#====Replace gene names using BiomaRt ======")
+                    rownames.GSEA_expr = rownames(GSEA_expr)
+                    human = biomaRt::useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+                    mouse = biomaRt::useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+                    
+                    genesV2 = biomaRt::getLDS(attributes = c("mgi_symbol"), #filters = "mgi_symbol",
+                                              values = rownames(GSEA_expr) , mart = mouse,
+                                              attributesL = c("hgnc_symbol"), 
+                                              martL = human, uniqueRows=T)
+                    rm = duplicated(genesV2[,1])
+                    genesV2 = genesV2[!rm,]
+                    colnames(genesV2) = c("gene","NAME")
+                    colnames(GSEA_expr)[1] = "gene"
+                    GSEA_expr <- merge(genesV2,GSEA_expr,by = "gene")
+                    GSEA_expr = GSEA_expr[,-1]
+            } else if(Mouse2Human == "toupper") GSEA_expr$NAME %<>% toupper()
         
-        genesV2 = biomaRt::getLDS(attributes = c("mgi_symbol"), #filters = "mgi_symbol",
-                         values = rownames(GSEA_expr) , mart = mouse,
-                         attributesL = c("hgnc_symbol"), 
-                         martL = human, uniqueRows=T)
-        rm = duplicated(genesV2[,1])
-        genesV2 = genesV2[!rm,]
-        colnames(genesV2) = c("gene","NAME")
-        colnames(GSEA_expr)[1] = "gene"
-        GSEA_expr <- merge(genesV2,GSEA_expr,by = "gene")
-        GSEA_expr = GSEA_expr[,-1]
     }
-    file.name = paste(unique(Idents(object)), collapse = "_")
+    if(!is.null(file.name)) file.name = paste(unique(Idents(object)), collapse = "_")
     if(!is.null(continuous.label)) file.name <- paste(continuous.label,collapse = "_")
     if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
     if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
