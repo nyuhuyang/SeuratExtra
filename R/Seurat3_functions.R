@@ -559,7 +559,7 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                         group.bar = TRUE, group1.colors = Singler.colors, 
                         group2.colors=Singler.colors, colors = Seurat::PurpleAndYellow(),
                         disp.min = -2.5, disp.max = NULL, slot = "scale.data",
-                        assay = NULL, label = TRUE, size = 5.5, hjust = 0, angle = 45,
+                        assay = NULL, label = FALSE, size = 5.5, hjust = 0, angle = 45,
                         raster = TRUE, draw.lines = TRUE, lines.width = NULL, group.bar.height = 0.02,
                         combine = TRUE,title = "",title.size = 14,do.print = FALSE,
                         position = "right",save.path = NULL,file.name = NULL,
@@ -707,17 +707,13 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                 names(x = cols) <- levels(x = group.use2)
                 
                 # extract coordicates of ggplot2
-                #' @export x.min,x.max,y.min,y.max, coordinate values anti-clockwise from left bottom
-                Extract_coord <- function(g){
-                        pbuild <- ggplot_build(plot = g)
-                        x.min <- min(pbuild$layout$panel_params[[1]]$x.range)
-                        x.max <- max(pbuild$layout$panel_params[[1]]$x.range)
-                        y.min <- min(pbuild$layout$panel_params[[1]]$y.range)
-                        y.max <- max(pbuild$layout$panel_params[[1]]$y.range)
-                        
-                        return(list("x.min" = x.min, "x.max" = x.max, "y.min" = y.min,"y.max" = y.max))
-                }
-                coord <- Extract_coord(plot)
+                pbuild <- ggplot_build(plot = plot)
+                x.min <- min(pbuild$layout$panel_params[[1]]$x.range)
+                x.max <- max(pbuild$layout$panel_params[[1]]$x.range)
+                y.min <- min(pbuild$layout$panel_params[[1]]$y.range)
+                y.max <- max(pbuild$layout$panel_params[[1]]$y.range)
+                coord <- list("x.min" = x.min, "x.max" = x.max, "y.min" = y.min,"y.max" = y.max)
+                
                 y.range = coord$y.max - coord$y.min
                 y.pos = coord$y.max + y.range * 0.015
                 coord$y.max = y.pos + group.bar.height * y.range
@@ -740,7 +736,12 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                         if (draw.lines) group3_colors = c(group3_colors[1:(length(group3_colors)-1)],
                                                           "#FFFFFF")
                         names(x = group3_colors) <- levels(x = group.use3)
-                        coord <- Extract_coord(plot)
+                        pbuild <- ggplot_build(plot = plot)
+                        x.min <- min(pbuild$layout$panel_params[[1]]$x.range)
+                        x.max <- max(pbuild$layout$panel_params[[1]]$x.range)
+                        y.min <- min(pbuild$layout$panel_params[[1]]$y.range)
+                        y.max <- max(pbuild$layout$panel_params[[1]]$y.range)
+                        coord <- list("x.min" = x.min, "x.max" = x.max, "y.min" = y.min,"y.max" = y.max)
                         
                         bar.ymin = coord$y.max+ y.range * 0.01
                         bar.ymax = bar.ymin + group.bar.height * y.range
@@ -764,34 +765,6 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
 
                                 plot <- patchwork::wrap_plots(plot,legend, ncol = ncol, nrow = nrow,design = design)
                         }
-                }
-
-                if (label) {
-                        y.max = coord$y.max
-                        x.max = coord$x.max
-                        x.divs <- pbuild$layout$panel_params[[1]]$x.major %||% 
-                                attr(x = pbuild$layout$panel_params[[1]]$x$get_breaks(), 
-                                     which = "pos")
-                        x <- data.frame(group = sort(x = group.use), 
-                                        x = x.divs)
-                        label.x.pos <- tapply(X = x$x, INDEX = x$group, 
-                                              FUN = function(y) {
-                                                      if (isTRUE(x = draw.lines)) {
-                                                              mean(x = y[-length(x = y)])
-                                                      }
-                                                      else {
-                                                              mean(x = y)
-                                                      }
-                                              })
-                        label.x.pos <- data.frame(group = names(x = label.x.pos), 
-                                                  label.x.pos)
-                        plot <- plot + geom_text(stat = "identity", 
-                                                 data = label.x.pos, aes_string(label = "group", 
-                                                                                x = "label.x.pos"), y = y.max + y.max * 
-                                                         0.03 * 0.5, angle = angle, hjust = hjust, 
-                                                 size = size)
-                        plot <- suppressMessages(plot + coord_cartesian(ylim = c(0, y.max + y.max * 0.002 * max(nchar(x = levels(x = group.use))) * 
-                                                                                         size), clip = "off"))
                 }
         }
         if(do.print){
@@ -2812,6 +2785,7 @@ PrepareGSEA <- function(object, k = 1, do.return = FALSE, continuous.label = NUL
     meta.data = bind_rows(split_meta.data)
     object@meta.data = meta.data[rownames(object@meta.data),]
 
+    Idents(object) = "GSEA"
     if(!is.null(continuous.label)) {
         Idents(object) %<>% factor(levels = paste0(rep(continuous.label,each = k),
                                                    "_",rep(1:k)))
@@ -2866,7 +2840,7 @@ PrepareGSEA <- function(object, k = 1, do.return = FALSE, continuous.label = NUL
             } else if(Mouse2Human == "toupper") GSEA_expr$NAME %<>% toupper()
         
     }
-    if(!is.null(file.name)) file.name = paste(unique(Idents(object)), collapse = "_")
+    if(is.null(file.name)) file.name = paste(unique(Idents(object)), collapse = "_")
     if(!is.null(continuous.label)) file.name <- paste(continuous.label,collapse = "_")
     if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
     if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
