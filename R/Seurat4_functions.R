@@ -507,7 +507,7 @@ DoHeatmap.1 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
         colnames(dge_markers)[grep("cluster*.",colnames(dge_markers))[1]] = "cluster"
         top <-  dge_markers %>%
             group_by(cluster) %>%
-            top_n(Top_n, avg_logFC)
+            top_n(Top_n, avg_log2FC)
         features = c(base::as.character(top$gene),features)
     }
     if((length(group.colors) != length(unique(Idents(object)))) &
@@ -581,7 +581,7 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                 colnames(dge_markers)[grep("cluster*.",colnames(dge_markers))[1]] = "cluster"
                 top <-  dge_markers %>%
                         group_by(cluster) %>%
-                        top_n(Top_n, avg_logFC)
+                        top_n(Top_n, avg_log2FC)
                 features = c(base::as.character(top$gene),features)
         }
         
@@ -1292,7 +1292,7 @@ ExtractMetaColor <- function(object, group.by = NULL){
 #' @param shape shape of venn diagram
 #' @param key Names of venn diagram catergroy, which must be the sub components of df$cluster.
 #'  defaul NULL means all components of df$cluster.
-#' @param cut_off choose within c("p_val","p_val_adj","avg_logFC")
+#' @param cut_off choose within c("p_val","p_val_adj","avg_log2FC")
 #' @param cut_off_value corrsponding cut off value.
 #' @param eulerr::euler table
 #' @param do.legend TRUE/FALSE
@@ -1302,8 +1302,8 @@ ExtractMetaColor <- function(object, group.by = NULL){
 #' @param save.path path to save
 #' @export g plot object
 #' @export pos_genes positive shared gene list
-#' @example eulerr(T_cells_markers,shape =  "ellipse",cut_off = "avg_logFC", cut_off_value = 0.01)
-eulerr <- function(df, group.by = "cluster",key = NULL, cut_off = "avg_logFC",cut_off_value = 0.05, 
+#' @example eulerr(T_cells_markers,shape =  "ellipse",cut_off = "avg_log2FC", cut_off_value = 0.01)
+eulerr <- function(df, group.by = "cluster",key = NULL, cut_off = "avg_log2FC",cut_off_value = 0.05, 
                    do.lenged = TRUE,do.return = TRUE, return.raw = FALSE,
                    do.print = FALSE,save.path = NULL,file.name =NULL,
                    shape = c("circle", "ellipse"),units="in", width=7, height=7,res=600,...){
@@ -1312,12 +1312,12 @@ eulerr <- function(df, group.by = "cluster",key = NULL, cut_off = "avg_logFC",cu
         if(!is.null(key)) df <- df[(df[,group.by]%in% key),]
         df_list <- split(df,df[,group.by])
         
-        if(cut_off == "avg_logFC"){
-            pos_genes <- lapply(df_list, function(df) df[(df$avg_logFC > cut_off_value),"gene"]) %>% 
+        if(cut_off == "avg_log2FC"){
+            pos_genes <- lapply(df_list, function(df) df[(df$avg_log2FC > cut_off_value),"gene"]) %>% 
                     lapply(unique)
         }  
         if(any(cut_off %in% c("p_val","p_val_adj"))){
-                pos_genes1 <- lapply(df_list, function(df) df[(df$avg_logFC > 0),"gene"])
+                pos_genes1 <- lapply(df_list, function(df) df[(df$avg_log2FC > 0),"gene"])
                 shared_genes <- lapply(df_list, function(df) df[(abs(df[,cut_off]) > cut_off_value),"gene"])
                 pos_genes <- mapply(function(x,y) unique(c(x,y)), pos_genes1, shared_genes)
         }
@@ -1629,8 +1629,8 @@ FgseaBarplot <- function(stats=res, pathways=hallmark, nperm=1000,cluster = 1,
                          cut.off = c("pval","padj"),cut.off.value = 0.25,
                          do.print = TRUE, do.return = FALSE, save.path = NULL, file.name = NULL){
     
-    res = stats[order(stats["avg_logFC"]),]
-    geneRank = res[res$cluster == cluster,c("gene","avg_logFC")] %>% tibble::deframe
+    res = stats[order(stats["avg_log2FC"]),]
+    geneRank = res[res$cluster == cluster,c("gene","avg_log2FC")] %>% tibble::deframe
     
     fgseaRes <- fgseaMultilevel(pathways=pathways, stats=geneRank, nperm=nperm)
     print(dim(fgseaRes))
@@ -1685,7 +1685,7 @@ FgseaBarplot <- function(stats=res, pathways=hallmark, nperm=1000,cluster = 1,
 }
 
 #' FgseaDotPlot generate Dot plot using findmarker results based on FGSEA
-#' @param stats Seurat findmarker results, data frame with c("gene","avg_logFC","clusters") columns
+#' @param stats Seurat findmarker results, data frame with c("gene","avg_log2FC","clusters") columns
 #' @param pathways pathway list
 #' @param rm.na TRUE/FALSE, remove NA results from fgsea results
 #' @param cols dot color specturm
@@ -1726,7 +1726,7 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
     fgseaRes <- list()
     for(i in seq_along(clusters)){
         geneRank = stats[stats$cluster == clusters[i],]
-        geneRank = geneRank[order(geneRank["avg_logFC"]),c("gene","avg_logFC")]  %>% tibble::deframe()
+        geneRank = geneRank[order(geneRank["avg_log2FC"]),c("gene","avg_log2FC")]  %>% tibble::deframe()
         fgseaRes[[i]] <- fgseaMultilevel(pathways=pathways, stats=geneRank)
         fgseaRes[[i]] = as.data.frame(fgseaRes[[i]])
         fgseaRes[[i]] = fgseaRes[[i]][,c("pathway","pval","padj","NES")]
@@ -2092,7 +2092,7 @@ FindMarkers.UMI <- function (object, ident.1 = NULL, ident.2 = NULL, group.by = 
             n = nrow(x = object)
         )
     }
-    #de.results$avg_logFC = log2(exp(1)) * de.results$avg_logFC
+    #de.results$avg_log2FC = log2(exp(1)) * de.results$avg_log2FC
     if(slot == "data"){
         avg_UMI.1 <- Matrix::rowMeans(expm1(x = data.use[, ident.1]))
         avg_UMI.2 <- Matrix::rowMeans(expm1(x = data.use[, ident.2]))
@@ -2155,7 +2155,7 @@ FindPairMarkers <- function(object, ident.1, ident.2 = NULL, features = NULL,
                                     only.pos = only.pos, min.cells.feature = min.cells.feature, 
                                     min.cells.group = min.cells.group, latent.vars = latent.vars, 
                                     max.cells.per.ident = max.cells.per.ident,...)
-        gde[[i]] <- gde[[i]][order(-gde[[i]]$avg_logFC,gde[[i]]$p_val),]
+        gde[[i]] <- gde[[i]][order(-gde[[i]]$avg_log2FC,gde[[i]]$p_val),]
         gde[[i]] <- subset(x = gde[[i]], subset = p_val < return.thresh)
         gde[[i]]$cluster1.vs.cluster2 <- ident.1vs2
         gde[[i]]$gene <- rownames(x = gde[[i]])
@@ -2434,7 +2434,7 @@ list2df <- function(list){
 # make corlor bar for DoHeatmap
 #' @param object Seurat object
 #' @param dge_markers FindAllMarkers results
-#' @param Top_n top_n(Top_n, avg_logFC)
+#' @param Top_n top_n(Top_n, avg_log2FC)
 #' @param features extra genes to add beyound FindAllMarkers results 
 #' @param remove.legend TRUE/FALSE
 #' @param color color scheme
@@ -2458,7 +2458,7 @@ MakeCorlorBar <- function(object, dge_markers = NULL, Top_n = NULL, features = N
     if(!is.null(dge_markers)){
         colnames(dge_markers)[grep("cluster",colnames(dge_markers))] ="cluster"
         dge_markers %<>% group_by(cluster)
-        if(!is.null(Top_n)) dge_markers %<>% top_n(Top_n, avg_logFC)
+        if(!is.null(Top_n)) dge_markers %<>% top_n(Top_n, avg_log2FC)
         dge_markers = rbind(dge_markers[,c("gene","cluster")],
                                      marker_bar)
     } else dge_markers <- marker_bar
@@ -3659,8 +3659,8 @@ VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value =
                          legend.size = 12, legend.position = "bottom", ...) {
     data[,paste0("log10_",cut_off[1])] = -log10(data[,cut_off[1]])
     data$change = ifelse(data[,cut_off[1]] < cut_off_value &
-                             abs(data$avg_logFC) >= cut_off_logFC, 
-                         ifelse(data$avg_logFC > cut_off_logFC ,'Upregulated','Downregulated'),
+                             abs(data$avg_log2FC) >= cut_off_logFC,
+                         ifelse(data$avg_log2FC > cut_off_logFC ,'Upregulated','Downregulated'),
                          'Stable')
     cols.order = switch (legend.position,
                          "bottom" = rev(cols.order),
@@ -3680,14 +3680,14 @@ VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value =
         Up_gene_index <- rownames(Up)[Up[,sort.by] <= tail(head(sort(Up[,sort.by],decreasing = F),top),1)]
         Down_gene_index <- rownames(Down)[Down[,sort.by] <= tail(head(sort(Down[,sort.by],decreasing = F),top),1)]
     }
-    if(sort.by == "avg_logFC") {
+    if(sort.by == "avg_log2FC") {
         Up_gene_index <- rownames(Up)[Up[,sort.by] >= tail(head(sort(Up[,sort.by],decreasing = T),top),1)]
         Down_gene_index <- rownames(Down)[Down[,sort.by] <= tail(head(sort(Down[,sort.by],decreasing = F),top),1)]
     }
     p<-ggplot(
         #设置数据
         data, 
-        mapping = aes_string(x = "avg_logFC", 
+        mapping = aes_string(x = "avg_log2FC", 
                              y = paste0("log10_",cut_off[1]),
                              fill = "change"))+
        geom_point(mapping = aes_string(color = "change"), alpha=alpha, size=size,...)
