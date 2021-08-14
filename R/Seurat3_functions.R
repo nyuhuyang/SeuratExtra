@@ -1318,8 +1318,8 @@ eulerr <- function(df, group.by = "cluster",key = NULL, cut_off = "avg_logFC",cu
         }  
         if(any(cut_off %in% c("p_val","p_val_adj"))){
                 pos_genes1 <- lapply(df_list, function(df) df[(df$avg_logFC > 0),"gene"])
-                shared_genes <- lapply(df_list, function(df) df[(abs(df[,cut_off]) > cut_off_value),"gene"])
-                pos_genes <- mapply(function(x,y) unique(c(x,y)), pos_genes1, shared_genes)
+                shared_genes <- lapply(df_list, function(df) df[(df[,cut_off] < cut_off_value),"gene"])
+                pos_genes <- mapply(function(x,y) intersect(x,y), pos_genes1, shared_genes)
         }
         euler_df <- eulerr::euler(pos_genes,shape = shape,...)
         

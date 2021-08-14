@@ -1318,8 +1318,8 @@ eulerr <- function(df, group.by = "cluster",key = NULL, cut_off = "avg_log2FC",c
         }  
         if(any(cut_off %in% c("p_val","p_val_adj"))){
                 pos_genes1 <- lapply(df_list, function(df) df[(df$avg_log2FC > 0),"gene"])
-                shared_genes <- lapply(df_list, function(df) df[(abs(df[,cut_off]) > cut_off_value),"gene"])
-                pos_genes <- mapply(function(x,y) unique(c(x,y)), pos_genes1, shared_genes)
+                shared_genes <- lapply(df_list, function(df) df[(df[,cut_off] < cut_off_value),"gene"])
+                pos_genes <- mapply(function(x,y) intersect(x,y), pos_genes1, shared_genes)
         }
         euler_df <- eulerr::euler(pos_genes,shape = shape,...)
         
@@ -1705,7 +1705,7 @@ FgseaBarplot <- function(stats=res, pathways=hallmark, nperm=1000,cluster = 1,
 #' @export save.path folder to save
 #' @param ... ggballoonplot param
 #' @example FgseaDotPlot(stats=res, pathways=hallmark,title = "each B_MCL clusters")
-FgseaDotPlot <- function(stats=results, pathways=NULL,
+FgseaDotPlot <- function(stats, pathways=NULL,
                          size = " -log10(pval)", 
                          scale.by =c('size','radius')[1],
                          font.ytickslab = 15,
@@ -1727,7 +1727,7 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
     for(i in seq_along(clusters)){
         geneRank = stats[stats$cluster == clusters[i],]
         geneRank = geneRank[order(geneRank["avg_log2FC"]),c("gene","avg_log2FC")]  %>% tibble::deframe()
-        fgseaRes[[i]] <- fgseaMultilevel(pathways=pathways, stats=geneRank)
+        fgseaRes[[i]] <- fgseaMultilevel(pathways=pathways, stats=geneRank,eps = 0)
         fgseaRes[[i]] = as.data.frame(fgseaRes[[i]])
         fgseaRes[[i]] = fgseaRes[[i]][,c("pathway","pval","padj","NES")]
         if(clusters[i] == order.yaxis.by[1] & is.null(order.yaxis)) {
@@ -1819,6 +1819,8 @@ FgseaDotPlot <- function(stats=results, pathways=NULL,
                                                      Range = range(df_fgseaRes[,fill], na.rm = T))) #RPMG::SHOWPAL(ggsci::pal_gsea()(12))
     if(size %in% c("padj", "pval")) plot = plot + scale.func(breaks=c(0,0.05,0.10,0.15,0.2,0.25),
                                                 labels=rev(c(0,0.05,0.10,0.15,0.2,0.25)))
+    if(size %in% c(" -log10(padj)", " -log10(pval)")) plot = plot + scale.func(breaks=c(1,2,5,10,20,30,40),
+                                                             labels=c(1,2,5,10,20,30,40))
     if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
     if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
     if(is.null(file.name)) file.name =  paste0("Dotplot_",title,"_",
