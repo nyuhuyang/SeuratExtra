@@ -1691,7 +1691,6 @@ FgseaBarplot <- function(stats=res, pathways=hallmark, nperm=1000,cluster = 1,
 #' FgseaDotPlot generate Dot plot using findmarker results based on FGSEA
 #' @param stats Seurat findmarker results, data frame with c("gene","avg_log2FC","clusters") columns
 #' @param pathways pathway list
-#' @param rm.na TRUE/FALSE, remove NA results from fgsea results
 #' @param cols dot color specturm
 #' @param Rowv determines if and how the row dendrogram should be reordered. 
 #' By default, NULL or FALSE, then no dendrogram is computed and no reordering is done.
@@ -1715,7 +1714,6 @@ FgseaDotPlot <- function(stats, pathways=NULL,
                          font.ytickslab = 15,
                          fill = "NES", title="", 
                          cols = pal_gsea()(12),
-                         rm.na = T,
                          order.yaxis.by = c(1,"pval"),decreasing = T,
                          Rowv = FALSE,Colv = FALSE,
                          order.yaxis = NULL,
@@ -1740,17 +1738,15 @@ FgseaDotPlot <- function(stats, pathways=NULL,
         }
         if(!is.null(pval)) fgseaRes[[i]][fgseaRes[[i]]$pval > pval,fill] = NA
         if(!is.null(padj)) fgseaRes[[i]][fgseaRes[[i]]$padj > padj,fill] = NA
-        if(rm.na) fgseaRes[[i]] = fgseaRes[[i]][complete.cases(fgseaRes[[i]]),]
+        fgseaRes[[i]] = fgseaRes[[i]][complete.cases(fgseaRes[[i]]),]
         if(nrow(fgseaRes[[i]]) > 0 ) {
             fgseaRes[[i]]$cluster = clusters[i]
         } else fgseaRes[[i]] =NA
         Progress(i, length(clusters))
     }
-    df_fgseaRes <- data.table::rbindlist(fgseaRes) %>% as.data.frame()
+    df_fgseaRes <- dplyr::bind_rows(fgseaRes) %>% as.data.frame()
     if(nrow(df_fgseaRes) == 0) stop("No significant pathway! Try higher p-value!")
-    if(rm.na) {
-            df_fgseaRes = df_fgseaRes[!is.na(df_fgseaRes[, "pathway"]),]
-    }
+    df_fgseaRes = df_fgseaRes[!is.na(df_fgseaRes[, "pathway"]),]
     df_fgseaRes[," -log10(pval)"] = -log10(df_fgseaRes$pval)
     df_fgseaRes[," -log10(padj)"] = -log10(df_fgseaRes$padj)
     if(verbose) print(round(dim(df_fgseaRes)/length(clusters)))
@@ -1765,7 +1761,6 @@ FgseaDotPlot <- function(stats, pathways=NULL,
         mtx_fgseaRes %<>% as.matrix()
         mtx_fgseaRes[is.na(mtx_fgseaRes)] = 0
     }
-    order.yaxis = order.yaxis[order.yaxis %in% rownames(mtx_fgseaRes)]
     if(is.null(order.yaxis)){
             if(isTRUE(Rowv)) {
                     hcr <- hclust(as.dist(1-cor(t(mtx_fgseaRes), method="spearman")),
@@ -1778,7 +1773,10 @@ FgseaDotPlot <- function(stats, pathways=NULL,
                     order.yaxis = order.yaxis[order.yaxis %in% df_fgseaRes[,"pathway"]]
             }
     }
-
+    order.yaxis = order.yaxis[order.yaxis %in% rownames(mtx_fgseaRes)]
+    df_fgseaRes %<>% filter(pathway %in% order.yaxis)
+    df_fgseaRes[,"pathway"] %<>% factor(levels = rev(order.yaxis))
+    
     if(isTRUE(Colv)) {
         hcc <- hclust(as.dist(1-cor(mtx_fgseaRes, method="spearman")),
                       method="ward.D2")
@@ -1786,10 +1784,7 @@ FgseaDotPlot <- function(stats, pathways=NULL,
         colInd <- order.dendrogram(ddc)
         order.xaxis = colnames(mtx_fgseaRes)[colInd]
     }
-    df_fgseaRes[,"pathway"] %<>% as.factor
-    df_fgseaRes[,"pathway"] %<>% factor(levels = rev(order.yaxis))
     if(!is.null(order.xaxis)) {
-        df_fgseaRes[,"cluster"] %<>% as.factor()
         df_fgseaRes[,"cluster"] %<>% factor(levels = order.xaxis)
         df_fgseaRes %<>% with(df_fgseaRes[order(pathway,cluster),])
     }
