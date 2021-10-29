@@ -548,6 +548,7 @@ DoHeatmap.1 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
 #' instead of adding additional heatmap, produce additonal annotation bar(s) on top of heatmap, 
 #' @param group1.colors hex color character vector matching to group.by[1]
 #' @param group2.colors hex color character vector matching to group.by[2]
+#' @param ... if length(group.by) >= 3, assign group3.colors, group4.colors ...
 #' @param colors hex color character vector for heatmap, default is Seurat::PurpleAndYellow(), or ggsci::pal_gsea()(12)
 #' @param position gene name position
 #' @param nrow pass to wrap_plots
@@ -726,16 +727,18 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                                           ymin = y.pos, ymax = coord$y.max) + 
                         coord_cartesian(ylim = c(0, coord$y.max), clip = "off") + 
                         scale_color_manual(values = cols)
-                
+
                 for (i in 2:ncol(x = groups.use)) {
                         group.use3 = groups.use[names(group.use2),i]
                         if (!is.factor(x = group.use3)) group.use3 %<>% factor()
                         group.use3 %<>% droplevels()
-                        if(length(levels(group.use3)) > length(group2.colors)) stop("Not enough color!")
-                        group3_colors = group2.colors[1:length(unique(group.use3))]
-                        if (draw.lines) group3_colors = c(group3_colors[1:(length(group3_colors)-1)],
+                        assign("group_n.colors",get(paste0("group",i,".colors")))
+                        
+                        if(length(levels(group.use3)) > length(group_n.colors)) stop("Not enough color!")
+                        group_N_colors = group_n.colors[1:length(unique(group.use3))]
+                        if (draw.lines) group_N_colors = c(group_N_colors[1:(length(group_N_colors)-1)],
                                                           "#FFFFFF")
-                        names(x = group3_colors) <- levels(x = group.use3)
+                        names(x = group_N_colors) <- levels(x = group.use3)
                         pbuild <- ggplot_build(plot = plot)
                         x.min <- min(pbuild$layout$panel_params[[1]]$x.range)
                         x.max <- max(pbuild$layout$panel_params[[1]]$x.range)
@@ -747,14 +750,14 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                         bar.ymax = bar.ymin + group.bar.height * y.range
                         
                         plot <- plot + 
-                                annotation_raster(raster = t(x = group3_colors[group.use3]), 
+                                annotation_raster(raster = t(x = group_N_colors[group.use3]), 
                                                   xmin = coord$x.min, xmax = coord$x.max, 
                                                   ymin = bar.ymin, 
                                                   ymax = bar.ymax)+
                                 coord_cartesian(ylim = c(0, bar.ymax), clip = "off")
                         if(!no.legend){
                                 df <- as.data.frame(table(group.use3))
-                                df$color = group3_colors[df$group.use3]
+                                df$color = group_N_colors[df$group.use3]
                                 colnames(df)[1] = group.by[i]
                                 legend <- ggplot(df,aes_string(x = "Freq", fill = group.by[i]))+ 
                                         geom_bar() + scale_fill_manual(values=df$color)+ 
@@ -781,7 +784,8 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
 #' @param data.use expression data.frame
 #' @param group.by factor/character vector of column group labels
 #' @param group1.colors hex color character vector matching to group.by[1]
-#' @param group2.colors hex color character vector matching to group.by[2]
+#' @param group2.colors hex color character vector matching to group.by[2], 
+#' @param ... if length(group.by) >= 3, assign group3.colors, group4.colors ...
 #' @param colors hex color character vector for heatmap, default is Seurat::PurpleAndYellow(), or ggsci::pal_gsea()(12)
 #' @param save.path folder to save
 DoHeatmap.matrix <- function (data.use, features = NULL, cells = NULL, 
@@ -1703,7 +1707,7 @@ FgseaBarplot <- function(stats=res, pathways=hallmark, nperm=1000,cluster = 1,
 #' @param do.return return fgsea data frame
 #' @param return.raw return fgsea raw data
 #' @export save.path folder to save
-#' @param ... ggballoonplot param
+#' @param ... ggplot theme param
 #' @example FgseaDotPlot(stats=res, pathways=hallmark,title = "each B_MCL clusters")
 FgseaDotPlot <- function(stats, pathways=NULL,
                          size = " -log10(pval)", 
@@ -1815,8 +1819,10 @@ FgseaDotPlot <- function(stats, pathways=NULL,
             theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
             labs(x = "",y = "")+
             theme_bw() +
+            theme(...)+
         scale_fill_gradientn(colors = rescale_colors(cols = cols,
                                                      Range = range(df_fgseaRes[,fill], na.rm = T))) #RPMG::SHOWPAL(ggsci::pal_gsea()(12))
+    
     if(size %in% c("padj", "pval")) plot = plot + scale.func(breaks=c(0,0.05,0.10,0.15,0.2,0.25),
                                                 labels=rev(c(0,0.05,0.10,0.15,0.2,0.25)))
     if(size %in% c(" -log10(padj)", " -log10(pval)")) plot = plot + scale.func(breaks=c(1,2,5,10,20,30,40),
