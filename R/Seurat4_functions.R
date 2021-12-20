@@ -9,7 +9,9 @@ library(Matrix)
 library(qlcMatrix)
 library(cowplot)
 library(cowplot)
+library(svMisc)
 library(made4)
+
 # Set a default value if an object is nullf
 #
 # @param lhs An object to set if it's null
@@ -1320,6 +1322,121 @@ DotPlot.1 <- function(
         return(plot)
 }
 
+#' @param log.data = log2, 
+#' @param Score_df score or expression matrix, demonstrated in color
+#' @param prop_df score or expression matrix, demonstrated in dot size
+#' @param features colnames of Score_df and prop_df
+#' @param id rownames of Score_df and prop_df
+DotPlot.2 <- function(Score_df,prop_df, features = NULL,id = NULL,
+                      log.data = NULL,
+                      score_title = "Combined Score", pct.title = "Percent Expressed",
+                      cols = c("blue","green","yellow","orange","chocolate1","red"),
+                      col.min = 0,
+                      col.max = 1000,
+                      dot.min = 0,
+                      dot.scale = 4,
+                      scale = FALSE, scale.by = 'radius', split.by = NULL,split.colors = FALSE,
+                      scale.min = NA,scale.max = NA,exp.min = NA,exp.max = NA,n.breaks = NULL){
+        if(is.null(features)) features = colnames(Score_df)
+        if(is.null(id)) id = rownames(Score_df)
+        
+        prop_df %<>% rownames_to_column(var = "id") %>%
+                gather("features.plot","pct.exp",-id)
+        Score_df %<>% rownames_to_column(var = "id") %>%
+                gather("features.plot","avg.exp",-id)
+        if(identical(prop_df[,1:2],Score_df[,1:2])){
+                data.plot = cbind(prop_df, "avg.exp" = Score_df$avg.exp)
+        } else stop("prop_df and Score_df have different rows or columns")
+        if(all(id %in% data.plot$id)){
+                data.plot$id %<>% factor(levels = rev(id))
+        } else stop("some id don't exsit in rows of prop_df and Score_df")
+        if(all(features %in% data.plot$features.plot)){
+                data.plot$features.plot %<>% factor(levels = features)
+        } else stop("some id don't exsit in columns of prop_df and Score_df")
+        avg.exp.scaled <- sapply(
+                X = unique(x = data.plot$features.plot),
+                FUN = function(x) {
+                        data.use <- data.plot[data.plot$features.plot == x, 'avg.exp']
+                        if (scale) {
+                                data.use <- scale(x = data.use)
+                                data.use <- log.data(data = data.use, min = col.min, max = col.max)
+                        } else if(is.function(log.data)){
+                                data.use <- log.data(x = data.use+1)
+                        }
+                        return(data.use)
+                }
+        )
+        data.plot$avg.exp.scaled <- as.vector(x = avg.exp.scaled)
+        color.by <- ifelse(test = split.colors, yes = 'colors', no = 'avg.exp.scaled')
+        color.by <- ifelse(test = is.function(log.data), yes = 'avg.exp.scaled', no = color.by)
+        
+        if (!is.na(x = scale.min)) {
+                data.plot[data.plot$pct.exp < scale.min, 'pct.exp'] <- scale.min
+        }
+        if (!is.na(x = scale.max)) {
+                data.plot[data.plot$pct.exp > scale.max, 'pct.exp'] <- scale.max
+        }
+        
+        if (!is.na(x = exp.min)) {
+                data.plot[data.plot[,color.by] < exp.min, color.by] <- exp.min
+        }
+        if (!is.na(x = exp.max)) {
+                data.plot[data.plot[,color.by] > exp.max, color.by] <- exp.max
+        }
+        scale.func <- switch(
+                EXPR = scale.by,
+                'size' = scale_size,
+                'radius' = scale_radius,
+                stop("'scale.by' must be either 'size' or 'radius'")
+        )
+        plot <- ggplot(data = data.plot, mapping = aes_string(x = 'features.plot', y = 'id')) +
+                geom_point(mapping = aes_string(size = 'pct.exp', fill = color.by),
+                           color = "black", pch=21) +
+                scale.func(range = c(0, dot.scale), limits = c(scale.min, scale.max)) +
+                theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+                guides(size = guide_legend(title = 'Percent Expressed')) +
+                labs(
+                        x = 'Features',
+                        y = ifelse(test = is.null(x = split.by), yes = 'Identity', no = 'Split Identity')
+                ) +
+                cowplot::theme_cowplot()
+        
+        if (split.colors) {
+                plot <- plot + scale_color_identity()
+        } else if (length(x = cols) == 1) {
+                plot <- plot + scale_color_distiller(palette = cols)
+        } else if (length(x = cols) == 2){
+                plot <- plot + scale_color_gradient(low = cols[1], high = cols[2])
+        } else {
+                plot <- plot + scale_fill_gradientn(
+                        colours=cols,
+                        n.breaks = n.breaks,
+                        name = ifelse(test = is.function(log.data),
+                                      yes = paste("log",score_title),
+                                      no = score_title), 
+                        space = "Lab",
+                        na.value = "grey50",
+                        guide = "colourbar",
+                        aesthetics = "fill"
+                )
+        }
+        
+        if (!split.colors) {
+                plot <- plot + guides(color = guide_colorbar(title = pct.title))
+        }
+        plot = plot + theme(axis.line=element_blank(),
+                            text = element_text(size=16),
+                            panel.grid.major = element_blank(),
+                            axis.text.x = element_text(size=16,
+                                                       angle = 90, 
+                                                       hjust = 1,
+                                                       vjust= 0.5),
+                            axis.text.y = element_text(size=14),
+                            axis.title.x = element_blank(),
+                            axis.title.y = element_blank(),
+                            plot.title = element_text(face = "plain"))
+        return(plot)
+}
 
 #' Extend ElbowPlot function to select best resolution/cluster numbers
 #' @param no.legend remove legend
@@ -1822,6 +1939,7 @@ FgseaBarplot <- function(stats=res, pathways=hallmark, nperm=1000,cluster = 1,
 #' @param order.xaxis specify order of x axis
 #' @param do.return return fgsea data frame
 #' @param return.raw return fgsea raw data
+#' @param return.plot return fgsea plot
 #' @export save.path folder to save
 #' @param ... ggplot theme param
 #' @example FgseaDotPlot(stats=res, pathways=hallmark,title = "each B_MCL clusters")
@@ -1836,7 +1954,8 @@ FgseaDotPlot <- function(stats, pathways=NULL,
                          order.yaxis = NULL,
                          order.xaxis = NULL,
                          padj = 0.25, pval=0.05,
-                         do.return = F,return.raw = F,font.main = 18,
+                         do.return = F,return.raw = F,return.plot = F,
+                         font.main = 18,
                          verbose=T,save.path = NULL, file.name = NULL,
                          units = "in",width=10, height=7,hjust=0.5,angle=0,...){
     
@@ -1943,13 +2062,19 @@ FgseaDotPlot <- function(stats, pathways=NULL,
     if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
     if(is.null(file.name)) file.name =  paste0("Dotplot_",title,"_",
                                                "_",padj,"_",pval)
-    jpeg(paste0(save.path, "/", file.name,".jpeg"),units=units, width=width, height=height,res=600)
-    print(plot)
-    dev.off()
+    if(return.plot){
+        return(plot)
+    } else {
+        jpeg(paste0(save.path, "/", file.name,".jpeg"),units=units, width=width, height=height,res=600)
+        print(plot)
+        dev.off()
+    }
+    
     if(do.return & return.raw) {
         return(fgseaRes)
     } else if(do.return) {
-            df_fgseaRes = df_fgseaRes[match(order.yaxis,df_fgseaRes$pathway), ]
+            df_fgseaRes %<>% filter(pathway %in% order.yaxis)
+            df_fgseaRes$pathway %<>% factor(levels = order.yaxis)
             return(df_fgseaRes)
     }
 }
