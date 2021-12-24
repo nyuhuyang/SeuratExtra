@@ -9,7 +9,6 @@ library(Matrix)
 library(qlcMatrix)
 library(cowplot)
 library(cowplot)
-library(made4)
 # Set a default value if an object is nullf
 #
 # @param lhs An object to set if it's null

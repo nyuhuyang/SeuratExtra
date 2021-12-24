@@ -42,8 +42,8 @@ CreateBigSingleRObject.1 <- function (counts, annot = NULL, project.name, xy = N
 #' @param N split into smaller sample subsets. Suggest > 10000 to avoid null signature
 
 BigSCINA <- function (exp, signatures, N = 10000, max_iter = 100, convergence_n = 10, 
-                      convergence_rate = 0.99, sensitivity_cutoff = 1, rm_overlap = TRUE, 
-                      allow_unknown = TRUE, log_file = "SCINA.log") 
+                      convergence_rate = 0.99, sensitivity_cutoff = 1, rm_overlap = 1, 
+                      allow_unknown = 1, log_file = "SCINA.log") 
 {
     n = ncol(exp)
     N1 = N + round((n %% N)/(n %/% N))+1 # increase the N by add back rest of remainder plus 1
