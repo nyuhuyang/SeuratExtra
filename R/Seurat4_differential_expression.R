@@ -63,6 +63,7 @@ FindAllMarkers_UMI <- function(
         fc.name = NULL,
         base = 2,
         return.thresh = 1e-2,
+        densify = FALSE,
         ...
 ) {
         MapVals <- function(vec, from, to) {
@@ -139,6 +140,7 @@ FindAllMarkers_UMI <- function(
                                         mean.fxn = mean.fxn,
                                         fc.name = fc.name,
                                         base = base,
+                                        densify = densify,
                                         ...
                                 )
                         },
@@ -306,6 +308,7 @@ FindMarkers_UMI.default <- function(
         min.cells.group = 3,
         pseudocount.use = 1,
         fc.results = NULL,
+        densify = FALSE,
         ...
 ) {
         Seurat:::ValidateCellGroups(
@@ -379,6 +382,7 @@ FindMarkers_UMI.default <- function(
                 verbose = verbose,
                 min.cells.feature = min.cells.feature,
                 latent.vars = latent.vars,
+                densify = densify,
                 ...
         )
         de.results <- cbind(de.results, fc.results[rownames(x = de.results), , drop = FALSE])
@@ -436,6 +440,8 @@ FindMarkers_UMI.Assay <- function(
         mean.fxn = NULL,
         fc.name = NULL,
         base = 2,
+        densify = FALSE,
+        recorrect_umi = TRUE,
         ...
 ) {
 
@@ -482,10 +488,116 @@ FindMarkers_UMI.Assay <- function(
                 min.cells.group = min.cells.group,
                 pseudocount.use = pseudocount.use,
                 fc.results = fc.results,
+                densify = densify,
                 ...
         )
         return(de.results)
 }
+
+
+#' @param recorrect_umi Recalculate corrected UMI counts using minimum of the median UMIs when performing DE using multiple SCT objects; default is TRUE
+#'
+#' @rdname FindMarkers
+#' @concept differential_expression
+#' @export
+#' @method FindMarkers SCTAssay
+#'
+FindMarkers_UMI.SCTAssay <- function(
+        object,
+        slot = "data",
+        cells.1 = NULL,
+        cells.2 = NULL,
+        features = NULL,
+        logfc.threshold = 0.25,
+        test.use = 'wilcox',
+        min.pct = 0.1,
+        min.diff.pct = -Inf,
+        verbose = TRUE,
+        only.pos = FALSE,
+        max.cells.per.ident = Inf,
+        random.seed = 1,
+        latent.vars = NULL,
+        min.cells.feature = 3,
+        min.cells.group = 3,
+        pseudocount.use = 1,
+        mean.fxn = NULL,
+        fc.name = NULL,
+        base = 2,
+        densify = FALSE,
+        recorrect_umi = TRUE,
+        ...
+) {
+        data.slot <- ifelse(
+                test = test.use %in% DEmethods_counts(),
+                yes = 'counts',
+                no = slot
+        )
+        if (recorrect_umi && length(x = levels(x = object)) > 1) {
+                cell_attributes <- SCTResults(object = object, slot = "cell.attributes")
+                observed_median_umis <- lapply(
+                        X = cell_attributes,
+                        FUN = function(x) median(x[, "umi"])
+                )
+                model.list <- slot(object = object, "SCTModel.list")
+                median_umi.status <- lapply(X = model.list,
+                                            FUN = function(x) { return(tryCatch(
+                                                    expr = slot(object = x, name = 'median_umi'),
+                                                    error = function(...) {return(NULL)})
+                                            )})
+                if (any(is.null(unlist(median_umi.status)))){
+                        stop("SCT assay does not contain median UMI information.",
+                             "Run `PrepSCTFindMarkers()` before running `FindMarkers()` or invoke `FindMarkers(recorrect_umi=FALSE)`.")
+                }
+                model_median_umis <- SCTResults(object = object, slot = "median_umi")
+                min_median_umi <- min(unlist(x = observed_median_umis))
+                if (any(unlist(model_median_umis) != min_median_umi)){
+                        stop("Object contains multiple models with unequal library sizes. Run `PrepSCTFindMarkers()` before running `FindMarkers()`.")
+                }
+        }
+        
+        data.use <-  GetAssayData(object = object, slot = data.slot)
+        counts <- switch(
+                EXPR = data.slot,
+                'scale.data' = GetAssayData(object = object, slot = "counts"),
+                numeric()
+        )
+        fc.results <- FoldChange(
+                object = object,
+                slot = data.slot,
+                cells.1 = cells.1,
+                cells.2 = cells.2,
+                features = features,
+                pseudocount.use = pseudocount.use,
+                mean.fxn = mean.fxn,
+                fc.name = fc.name,
+                base = base
+        )
+        de.results <- FindMarkers_UMI(
+                object = data.use,
+                slot = data.slot,
+                counts = counts,
+                cells.1 = cells.1,
+                cells.2 = cells.2,
+                features = features,
+                logfc.threshold = logfc.threshold,
+                test.use = test.use,
+                min.pct = min.pct,
+                min.diff.pct = min.diff.pct,
+                verbose = verbose,
+                only.pos = only.pos,
+                max.cells.per.ident = max.cells.per.ident,
+                random.seed = random.seed,
+                latent.vars = latent.vars,
+                min.cells.feature = min.cells.feature,
+                min.cells.group = min.cells.group,
+                pseudocount.use = pseudocount.use,
+                fc.results = fc.results,
+                densify = densify,
+                ...
+        )
+        return(de.results)
+}
+
 
 #' @importFrom Matrix rowMeans
 #' @rdname FindMarkers
@@ -513,6 +625,7 @@ FindMarkers_UMI.DimReduc <- function(
         pseudocount.use = 1,
         mean.fxn = rowMeans,
         fc.name = NULL,
+        densify = FALSE,
         ...
         
 ) {
@@ -565,6 +678,7 @@ FindMarkers_UMI.DimReduc <- function(
                 verbose = verbose,
                 min.cells.feature = min.cells.feature,
                 latent.vars = latent.vars,
+                densify = densify,
                 ...
         )
         de.results <- cbind(de.results, fc.results)
@@ -635,6 +749,7 @@ FindMarkers_UMI.Seurat <- function(
         mean.fxn = NULL,
         fc.name = NULL,
         base = 2,
+        densify = FALSE,
         ...
 ) {
         if (!is.null(x = group.by)) {
@@ -645,6 +760,9 @@ FindMarkers_UMI.Seurat <- function(
         }
         if (!is.null(x = assay) && !is.null(x = reduction)) {
                 stop("Please only specify either assay or reduction.")
+        }
+        if (length(x = ident.1) == 0) {
+                stop("At least 1 ident must be specified in `ident.1`")
         }
         # select which data to use
         if (is.null(x = reduction)) {
@@ -669,6 +787,20 @@ FindMarkers_UMI.Seurat <- function(
                         cells = c(cells$cells.1, cells$cells.2)
                 )
         }
+        # check normalization method
+        norm.command <- paste0("NormalizeData.", assay)
+        if (norm.command %in% Command(object = object) && is.null(x = reduction)) {
+                norm.method <- Command(
+                        object = object,
+                        command = norm.command,
+                        value = "normalization.method"
+                )
+                if (norm.method != "LogNormalize") {
+                        mean.fxn <- function(x) {
+                                return(log(x = rowMeans(x = x) + pseudocount.use, base = base))
+                        }
+                }
+        }
         de.results <- FindMarkers_UMI(
                 object = data.use,
                 slot = slot,
@@ -690,80 +822,207 @@ FindMarkers_UMI.Seurat <- function(
                 pseudocount.use = pseudocount.use,
                 mean.fxn = mean.fxn,
                 base = base,
+                fc.name = fc.name,
+                densify = densify,
                 ...
         )
         return(de.results)
 }
 
 
-# VolcanoPlots to demonstrate Differential expressed genes
-# https://zhuanlan.zhihu.com/p/82785739?utm_source=ZHShareTargetIDMore&utm_medium=social&utm_oi=642996063045423104
-VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value = 0.05, cut_off_logFC = 0.25,top = 15,
-                         sort.by = "p_val_adj",
-                         cols = c("#ba2832","#d2dae2","#2a71b2"),
-                         cols.order = c('Upregulated','Stable','Downregulated'),
-                         alpha=0.8, size=2,
-                         legend.size = 12, legend.position = "bottom", ...) {
-        data[,paste0("log10_",cut_off[1])] = -log10(data[,cut_off[1]])
-        data$change = ifelse(data[,cut_off[1]] < cut_off_value &
-                                     abs(data$avg_log2FC) >= cut_off_logFC, 
-                             ifelse(data$avg_log2FC > cut_off_logFC ,'Upregulated','Downregulated'),
-                             'Stable')
-        cols.order = switch (legend.position,
-                             "bottom" = rev(cols.order),
-                             "right" = cols.order
+#' @param cells.1 Vector of cell names belonging to group 1
+#' @param cells.2 Vector of cell names belonging to group 2
+#' @param features Features to calculate fold change for.
+#' If NULL, use all features
+#' @importFrom Matrix rowSums
+#' @rdname FoldChange
+#' @concept differential_expression
+#' @export
+#' @method FoldChange default
+FoldChange.default <- function(
+        object,
+        cells.1,
+        cells.2,
+        mean.fxn,
+        fc.name,
+        features = NULL,
+        ...
+) {
+        features <- features %||% rownames(x = object)
+        # Calculate percent expressed
+        thresh.min <- 0
+        pct.1 <- round(
+                x = rowSums(x = object[features, cells.1, drop = FALSE] > thresh.min) /
+                        length(x = cells.1),
+                digits = 3
         )
-        cols = switch (legend.position,
-                       "bottom" = rev(cols),
-                       "right" = cols.order
+        pct.2 <- round(
+                x = rowSums(x = object[features, cells.2, drop = FALSE] > thresh.min) /
+                        length(x = cells.2),
+                digits = 3
         )
-        if(!is.null(cols.order)) data$change %<>% as.factor() %>% factor(levels = cols.order)
-        
-        colnames(data)[grep("cluster",colnames(data))]="cluster"
-        # 将需要标记的基因放置在单独的数组
-        Up <- data[data$change %in% "Upregulated",]
-        Down <- data[data$change %in% "Downregulated",]
-        if(sort.by == "p_val_adj") {
-                Up_gene_index <- rownames(Up)[Up[,sort.by] <= tail(head(sort(Up[,sort.by],decreasing = F),top),1)]
-                Down_gene_index <- rownames(Down)[Down[,sort.by] <= tail(head(sort(Down[,sort.by],decreasing = F),top),1)]
+        # Calculate fold change
+        data.1 <- mean.fxn(object[features, cells.1, drop = FALSE])
+        data.2 <- mean.fxn(object[features, cells.2, drop = FALSE])
+        fc <- (data.1 - data.2)
+        fc.results <- as.data.frame(x = cbind(fc, pct.1, pct.2))
+        colnames(fc.results) <- c(fc.name, "pct.1", "pct.2")
+        return(fc.results)
+}
+
+
+#' @importFrom Matrix rowMeans
+#' @rdname FoldChange
+#' @concept differential_expression
+#' @export
+#' @method FoldChange Assay
+FoldChange.Assay <- function(
+        object,
+        cells.1,
+        cells.2,
+        features = NULL,
+        slot = "data",
+        pseudocount.use = 1,
+        fc.name = NULL,
+        mean.fxn = NULL,
+        base = 2,
+        ...
+) {
+        data <- GetAssayData(object = object, slot = slot)
+        mean.fxn <- mean.fxn %||% switch(
+                EXPR = slot,
+                'data' = function(x) {
+                        return(log(x = rowMeans(x = expm1(x = x)) + pseudocount.use, base = base))
+                },
+                'scale.data' = rowMeans,
+                function(x) {
+                        return(log(x = rowMeans(x = x) + pseudocount.use, base = base))
+                }
+        )
+        # Omit the decimal value of e from the column name if base == exp(1)
+        base.text <- ifelse(
+                test = base == exp(1),
+                yes = "",
+                no = base
+        )
+        fc.name <- fc.name %||% ifelse(
+                test = slot == "scale.data",
+                yes = "avg_diff",
+                no = paste0("avg_log", base.text, "FC")
+        )
+        FoldChange(
+                object = data,
+                cells.1 = cells.1,
+                cells.2 = cells.2,
+                features = features,
+                mean.fxn = mean.fxn,
+                fc.name = fc.name
+        )
+}
+
+#' @importFrom Matrix rowMeans
+#' @rdname FoldChange
+#' @concept differential_expression
+#' @export
+#' @method FoldChange DimReduc
+FoldChange.DimReduc <- function(
+        object,
+        cells.1,
+        cells.2,
+        features = NULL,
+        slot = NULL,
+        pseudocount.use = NULL,
+        fc.name = NULL,
+        mean.fxn = NULL,
+        ...
+) {
+        mean.fxn <- mean.fxn %||% rowMeans
+        fc.name <- fc.name %||% "avg_diff"
+        data <- t(x = Embeddings(object = object))
+        features <- features %||% rownames(x = data)
+        # Calculate avg difference
+        data.1 <- mean.fxn(data[features, cells.1, drop = FALSE])
+        data.2 <- mean.fxn(data[features, cells.2, drop = FALSE])
+        fc <- (data.1 - data.2)
+        fc.results <- data.frame(fc)
+        colnames(fc.results) <- fc.name
+        return(fc.results)
+}
+
+#' @param ident.1 Identity class to calculate fold change for; pass an object of class
+#' \code{phylo} or 'clustertree' to calculate fold change for a node in a cluster tree;
+#' passing 'clustertree' requires \code{\link{BuildClusterTree}} to have been run
+#' @param ident.2 A second identity class for comparison; if \code{NULL},
+#' use all other cells for comparison; if an object of class \code{phylo} or
+#' 'clustertree' is passed to \code{ident.1}, must pass a node to calculate fold change for
+#' @param reduction Reduction to use - will calculate average difference on cell embeddings
+#' @param group.by Regroup cells into a different identity class prior to
+#' calculating fold change (see example in \code{\link{FindMarkers}})
+#' @param subset.ident Subset a particular identity class prior to regrouping.
+#' Only relevant if group.by is set (see example in \code{\link{FindMarkers}})
+#' @param assay Assay to use in fold change calculation
+#' @param slot Slot to pull data from
+#' @param pseudocount.use Pseudocount to add to averaged expression values when
+#' calculating logFC. 1 by default.
+#' @param mean.fxn Function to use for fold change or average difference calculation
+#' @param base The base with respect to which logarithms are computed.
+#' @param fc.name Name of the fold change, average difference, or custom function column
+#' in the output data.frame
+#'
+#' @rdname FoldChange
+#' @concept differential_expression
+#' @export
+#' @method FoldChange Seurat
+FoldChange.Seurat <- function(
+        object,
+        ident.1 = NULL,
+        ident.2 = NULL,
+        group.by = NULL,
+        subset.ident = NULL,
+        assay = NULL,
+        slot = 'data',
+        reduction = NULL,
+        features = NULL,
+        pseudocount.use = 1,
+        mean.fxn = NULL,
+        base = 2,
+        fc.name = NULL,
+        ...
+) {
+        if (!is.null(x = group.by)) {
+                if (!is.null(x = subset.ident)) {
+                        object <- subset(x = object, idents = subset.ident)
+                }
+                Idents(object = object) <- group.by
         }
-        if(sort.by == "avg_log2FC") {
-                Up_gene_index <- rownames(Up)[Up[,sort.by] >= tail(head(sort(Up[,sort.by],decreasing = T),top),1)]
-                Down_gene_index <- rownames(Down)[Down[,sort.by] <= tail(head(sort(Down[,sort.by],decreasing = F),top),1)]
+        if (!is.null(x = assay) && !is.null(x = reduction)) {
+                stop("Please only specify either assay or reduction.")
         }
-        p<-ggplot(
-                #设置数据
-                data, 
-                mapping = aes_string(x = "avg_log2FC", 
-                                     y = paste0("log10_",cut_off[1]),
-                                     fill = "change"))+
-                geom_point(mapping = aes_string(color = "change"), alpha=alpha, size=size,...)
-        # 辅助线
-        p = p + geom_vline(xintercept=c(-cut_off_logFC,cut_off_logFC),lty=4,col="black",lwd=0.8)
-        p = p + geom_hline(yintercept = -log10(cut_off_value),lty=4,col="black",lwd=0.8)
-        
-        # 坐标轴
-        p = p + theme_bw()+
-                labs(x="log2(fold change)",
-                     y= paste("-log10 (",ifelse(cut_off[1] == "p_val_adj", "adjusted p-value","p-value"),")"))+
-                
-                # 图例
-                theme(plot.title = element_text(hjust = 0.5), 
-                      axis.title=element_text(size=12),
-                      legend.position=legend.position, 
-                      legend.title = element_blank(),
-                      legend.text = element_text(size = legend.size),
-                )
-        if(!is.null(cols.order)) names(cols) = cols.order
-        
-        p = p + ggrepel::geom_text_repel(data = data[c(Down_gene_index, Up_gene_index),], 
-                                         aes(label = gene),
-                                         size = size,
-                                         box.padding = unit(0.5, "lines"),
-                                         point.padding = unit(0.8, "lines"), 
-                                         segment.color = "black", 
-                                         show.legend = FALSE)
-        #p = p + scale_colour_manual(values=cols[unique(data$change)])
-        p = p + scale_fill_manual(values=cols[unique(data$change)])
-        return(p)
+        # select which data to use
+        if (is.null(x = reduction)) {
+                assay <- assay %||% DefaultAssay(object = object)
+                data.use <- object[[assay]]
+                cellnames.use <-  colnames(x = data.use)
+        } else {
+                data.use <- object[[reduction]]
+                cellnames.use <- rownames(data.use)
+        }
+        cells <- IdentsToCells(
+                object = object,
+                ident.1 = ident.1,
+                ident.2 = ident.2,
+                cellnames.use = cellnames.use
+        )
+        fc.results <- FoldChange(
+                object = data.use,
+                cells.1 = cells$cells.1,
+                cells.2 = cells$cells.2,
+                features = features,
+                slot = slot,
+                pseudocount.use = pseudocount.use,
+                mean.fxn = mean.fxn,
+                base = base,
+                fc.name = fc.name
+        )
+        return(fc.results)
 }

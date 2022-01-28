@@ -1322,6 +1322,7 @@ DotPlot.1 <- function(
         return(plot)
 }
 
+
 #' @param log.data = log2, 
 #' @param Score_df score or expression matrix, demonstrated in color
 #' @param prop_df score or expression matrix, demonstrated in dot size
@@ -1348,9 +1349,11 @@ DotPlot.2 <- function(Score_df,prop_df, features = NULL,id = NULL,
                 data.plot = cbind(prop_df, "avg.exp" = Score_df$avg.exp)
         } else stop("prop_df and Score_df have different rows or columns")
         if(all(id %in% data.plot$id)){
+                if(!all(data.plot$id %in% id)) data.plot = data.plot[data.plot$id %in% id,]
                 data.plot$id %<>% factor(levels = rev(id))
         } else stop("some id don't exsit in rows of prop_df and Score_df")
         if(all(features %in% data.plot$features.plot)){
+                if(!all(data.plot$features.plot %in% features)) data.plot = data.plot[data.plot$features.plot %in% features,]
                 data.plot$features.plot %<>% factor(levels = features)
         } else stop("some id don't exsit in columns of prop_df and Score_df")
         avg.exp.scaled <- sapply(
@@ -1394,7 +1397,7 @@ DotPlot.2 <- function(Score_df,prop_df, features = NULL,id = NULL,
                            color = "black", pch=21) +
                 scale.func(range = c(0, dot.scale), limits = c(scale.min, scale.max)) +
                 theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
-                guides(size = guide_legend(title = 'Percent Expressed')) +
+                guides(size = guide_legend(title = pct.title)) +
                 labs(
                         x = 'Features',
                         y = ifelse(test = is.null(x = split.by), yes = 'Identity', no = 'Split Identity')
@@ -1437,6 +1440,7 @@ DotPlot.2 <- function(Score_df,prop_df, features = NULL,id = NULL,
                             plot.title = element_text(face = "plain"))
         return(plot)
 }
+
 
 #' Extend ElbowPlot function to select best resolution/cluster numbers
 #' @param no.legend remove legend
