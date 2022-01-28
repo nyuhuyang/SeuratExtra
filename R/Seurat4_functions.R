@@ -1970,8 +1970,10 @@ FgseaDotPlot <- function(stats, pathways=NULL,
         geneRank = stats[stats$cluster == clusters[i],]
         geneRank = geneRank[order(geneRank["avg_log2FC"]),c("gene","avg_log2FC")]  %>% tibble::deframe()
         fgseaRes[[i]] <- fgseaMultilevel(pathways=pathways, stats=geneRank,eps = 0)
+        leadingEdges= sapply(fgseaRes[[i]][,"leadingEdge"]$leadingEdge,function(x) paste(x,collapse = ","))
+        fgseaRes[[i]][,"leadingEdge"] =leadingEdges
         fgseaRes[[i]] = as.data.frame(fgseaRes[[i]])
-        fgseaRes[[i]] = fgseaRes[[i]][,c("pathway","pval","padj","NES")]
+        fgseaRes[[i]] = fgseaRes[[i]]#[,c("pathway","pval","padj","NES")]
         if(clusters[i] == order.yaxis.by[1] & is.null(order.yaxis)) {
             order.yaxis = fgseaRes[[i]][order(fgseaRes[[i]][,order.yaxis.by[2]],
                                               decreasing = decreasing), "pathway"]
