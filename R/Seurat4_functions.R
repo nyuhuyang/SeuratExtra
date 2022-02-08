@@ -455,6 +455,55 @@ CountsbyIdent <- function(object,subset.name,...){
     return(Cells_ident)
 }
 
+#https://www.biostars.org/p/171766/
+#' Convert counts to transcripts per million (TPM).
+#' 
+#' Convert a numeric matrix of features (rows) and conditions (columns) with
+#' raw feature counts to transcripts per million.
+#' 
+#'    Lior Pachter. Models for transcript quantification from RNA-Seq.
+#'    arXiv:1104.3889v2 
+#'    
+#'    Wagner, et al. Measurement of mRNA abundance using RNA-seq data:
+#'    RPKM measure is inconsistent among samples. Theory Biosci. 24 July 2012.
+#'    doi:10.1007/s12064-012-0162-3
+#'    
+#' @param counts A numeric matrix of raw feature counts i.e.
+#'  fragments assigned to each gene.
+#' @param featureLength A numeric vector with feature lengths.
+#' @param meanFragmentLength A numeric vector with mean fragment lengths.
+#' @return tpm A numeric matrix normalized by library size and feature length.
+counts_to_tpm <- function(counts) {
+        
+        # Ensure valid arguments.
+        #stopifnot(length(featureLength) == nrow(counts))
+        #stopifnot(length(meanFragmentLength) == ncol(counts))
+        featureLength = 1:nrow(counts)
+        meanFragmentLength = 1:ncol(counts)
+        # Compute effective lengths of features in each library.
+        effLen <- do.call(cbind, lapply(1:ncol(counts), function(i) {
+                featureLength - meanFragmentLength[i] + 1
+        }))
+        
+        # Exclude genes with length less than the mean fragment length.
+        idx <- apply(effLen, 1, function(x) min(x) > 1)
+        counts <- counts[idx,]
+        effLen <- effLen[idx,]
+        featureLength <- featureLength[idx]
+        
+        # Process one column at a time.
+        tpm <- do.call(cbind, lapply(1:ncol(counts), function(i) {
+                rate = log(counts[,i]) - log(effLen[,i])
+                denom = log(sum(exp(rate)))
+                exp(rate - denom + log(1e6))
+        }))
+        
+        # Copy the row and column names from the original matrix.
+        colnames(tpm) <- colnames(counts)
+        rownames(tpm) <- rownames(counts)
+        return(tpm)
+}
+
 
 #' Convert data frame to list
 #'
@@ -3903,16 +3952,19 @@ TSNEPlot.1 <- function(object,dims = c(1, 2),cells = NULL, cols = NULL, pt.size 
 # VolcanoPlots to demonstrate Differential expressed genes
 # https://zhuanlan.zhihu.com/p/82785739?utm_source=ZHShareTargetIDMore&utm_medium=social&utm_oi=642996063045423104
 VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value = 0.05, cut_off_logFC = 0.25,top = 15,
-                         sort.by = "p_val_adj",
+                         sort.by = "p_val_adj",genes = "",
                          cols = c("#ba2832","#d2dae2","#2a71b2"),
                          cols.order = c('Upregulated','Stable','Downregulated'),
                          alpha=0.8, size=2,
                          legend.size = 12, legend.position = "bottom", ...) {
-    data[,paste0("log10_",cut_off[1])] = -log10(data[,cut_off[1]])
+    data %<>% as.data.frame()
+    #data[,paste0("log10_",cut_off[1])] = -log10(data[,cut_off[1]])
     data$change = ifelse(data[,cut_off[1]] < cut_off_value &
                              abs(data$avg_log2FC) >= cut_off_logFC,
                          ifelse(data$avg_log2FC > cut_off_logFC ,'Upregulated','Downregulated'),
                          'Stable')
+    rownames(data) = data$gene
+    genes = genes[genes %in% data$gene]
     cols.order = switch (legend.position,
                          "bottom" = rev(cols.order),
                          "right" = cols.order
@@ -3941,7 +3993,7 @@ VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value =
         mapping = aes_string(x = "avg_log2FC", 
                              y = paste0("log10_",cut_off[1]),
                              fill = "change"))+
-       geom_point(mapping = aes_string(color = "change"), alpha=alpha, size=size,...)
+       geom_point(color = "black", pch=21, alpha=alpha, size=size,...)
         # 辅助线
     p = p + geom_vline(xintercept=c(-cut_off_logFC,cut_off_logFC),lty=4,col="black",lwd=0.8)
     p = p + geom_hline(yintercept = -log10(cut_off_value),lty=4,col="black",lwd=0.8)
@@ -3960,13 +4012,24 @@ VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value =
         )
     if(!is.null(cols.order)) names(cols) = cols.order
     
-    p = p + ggrepel::geom_text_repel(data = data[c(Down_gene_index, Up_gene_index),], 
-                                     aes(label = gene),
-                                     size = size,
-                                     box.padding = unit(0.5, "lines"),
-                                     point.padding = unit(0.8, "lines"), 
-                                     segment.color = "black", 
-                                     show.legend = FALSE)
+    if(length(c(Down_gene_index, Up_gene_index)) > 0){
+            p = p + ggrepel::geom_text_repel(data = data[c(Down_gene_index, Up_gene_index),], 
+                                             aes(label = gene),
+                                             size = size,
+                                             box.padding = unit(0.5, "lines"),
+                                             point.padding = unit(0.8, "lines"), 
+                                             segment.color = "black", 
+                                             show.legend = FALSE)   
+    }
+    if(length(genes) > 0 & !is.null(genes)){
+            p = p + ggrepel::geom_text_repel(data = data[genes,], 
+                                             aes(label = gene),
+                                             size = size,
+                                             box.padding = unit(0.5, "lines"),
+                                             point.padding = unit(0.8, "lines"), 
+                                             segment.color = "black", 
+                                             show.legend = FALSE)   
+    }
     #p = p + scale_colour_manual(values=cols[unique(data$change)])
     p = p + scale_fill_manual(values=cols[unique(data$change)])
     return(p)
