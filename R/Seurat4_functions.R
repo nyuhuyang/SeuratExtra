@@ -3955,10 +3955,12 @@ VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value =
                          sort.by = "p_val_adj",genes = "",
                          cols = c("#ba2832","#d2dae2","#2a71b2"),
                          cols.order = c('Upregulated','Stable','Downregulated'),
-                         alpha=0.8, size=2,
-                         legend.size = 12, legend.position = "bottom", ...) {
+                         alpha=0.8, size=2,font.size = size,
+                         legend.size = 12, legend.position = "bottom",force = 2, ...) {
     data %<>% as.data.frame()
-    #data[,paste0("log10_",cut_off[1])] = -log10(data[,cut_off[1]])
+    data[,paste0("log10_",cut_off[1])] = -log10(data[,cut_off[1]])
+    inf = is.infinite(data[,paste0("log10_",cut_off[1])])
+    data[inf,paste0("log10_",cut_off[1])] = 350
     data$change = ifelse(data[,cut_off[1]] < cut_off_value &
                              abs(data$avg_log2FC) >= cut_off_logFC,
                          ifelse(data$avg_log2FC > cut_off_logFC ,'Upregulated','Downregulated'),
@@ -3977,23 +3979,28 @@ VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value =
 
     colnames(data)[grep("cluster",colnames(data))]="cluster"
     # 将需要标记的基因放置在单独的数组
-    Up <- data[data$change %in% "Upregulated",]
-    Down <- data[data$change %in% "Downregulated",]
-    if(sort.by == "p_val_adj") {
-        Up_gene_index <- rownames(Up)[Up[,sort.by] <= tail(head(sort(Up[,sort.by],decreasing = F),top),1)]
-        Down_gene_index <- rownames(Down)[Down[,sort.by] <= tail(head(sort(Down[,sort.by],decreasing = F),top),1)]
+    if(top > 0) {
+            Up <- data[data$change %in% "Upregulated",]
+            Down <- data[data$change %in% "Downregulated",]
+            if(sort.by == "p_val_adj") {
+                    Up_gene_index <- rownames(Up)[Up[,sort.by] <= tail(head(sort(Up[,sort.by],decreasing = F),top),1)]
+                    Down_gene_index <- rownames(Down)[Down[,sort.by] <= tail(head(sort(Down[,sort.by],decreasing = F),top),1)]
+            }
+            if(sort.by == "avg_log2FC") {
+                    Up_gene_index <- rownames(Up)[Up[,sort.by] >= tail(head(sort(Up[,sort.by],decreasing = T),top),1)]
+                    Down_gene_index <- rownames(Down)[Down[,sort.by] <= tail(head(sort(Down[,sort.by],decreasing = F),top),1)]
+            }
+    } else {
+            Up_gene_index = ""; Down_gene_index = ""
     }
-    if(sort.by == "avg_log2FC") {
-        Up_gene_index <- rownames(Up)[Up[,sort.by] >= tail(head(sort(Up[,sort.by],decreasing = T),top),1)]
-        Down_gene_index <- rownames(Down)[Down[,sort.by] <= tail(head(sort(Down[,sort.by],decreasing = F),top),1)]
-    }
+    
     p<-ggplot(
         #设置数据
         data, 
         mapping = aes_string(x = "avg_log2FC", 
                              y = paste0("log10_",cut_off[1]),
                              fill = "change"))+
-       geom_point(color = "black", pch=21, alpha=alpha, size=size,...)
+       geom_point(color = "black", pch=21, alpha=alpha, size=size)
         # 辅助线
     p = p + geom_vline(xintercept=c(-cut_off_logFC,cut_off_logFC),lty=4,col="black",lwd=0.8)
     p = p + geom_hline(yintercept = -log10(cut_off_value),lty=4,col="black",lwd=0.8)
@@ -4012,23 +4019,29 @@ VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value =
         )
     if(!is.null(cols.order)) names(cols) = cols.order
     
-    if(length(c(Down_gene_index, Up_gene_index)) > 0){
+    if(top > 0 & length(c(Down_gene_index, Up_gene_index)) > 0){
             p = p + ggrepel::geom_text_repel(data = data[c(Down_gene_index, Up_gene_index),], 
                                              aes(label = gene),
-                                             size = size,
-                                             box.padding = unit(0.5, "lines"),
-                                             point.padding = unit(0.8, "lines"), 
+                                             size = font.size,
+                                             force = force,
+                                             box.padding = unit(1, "lines"),
+                                             point.padding = unit(1, "lines"), 
                                              segment.color = "black", 
-                                             show.legend = FALSE)   
+                                             show.legend = FALSE,
+                                             max.overlaps = Inf,
+                                             ...)   
     }
-    if(length(genes) > 0 & !is.null(genes)){
+    if(any(genes %in% data$gene)){
             p = p + ggrepel::geom_text_repel(data = data[genes,], 
                                              aes(label = gene),
-                                             size = size,
-                                             box.padding = unit(0.5, "lines"),
-                                             point.padding = unit(0.8, "lines"), 
+                                             size = font.size,
+                                             force = force,
+                                             box.padding = unit(1, "lines"),
+                                             point.padding = unit(1, "lines"), 
                                              segment.color = "black", 
-                                             show.legend = FALSE)   
+                                             show.legend = FALSE,
+                                             max.overlaps = Inf,
+                                             ...)   
     }
     #p = p + scale_colour_manual(values=cols[unique(data$change)])
     p = p + scale_fill_manual(values=cols[unique(data$change)])

@@ -385,6 +385,7 @@ FindMarkers_UMI.default <- function(
                 densify = densify,
                 ...
         )
+        print("PerformDE done !!")
         de.results <- cbind(de.results, fc.results[rownames(x = de.results), , drop = FALSE])
         if (only.pos) {
                 de.results <- de.results[de.results[, 2] > 0, , drop = FALSE]
