@@ -63,7 +63,7 @@ FindAllMarkers_UMI <- function(
         fc.name = NULL,
         base = 2,
         return.thresh = 1e-2,
-        densify = FALSE,
+        #densify = FALSE,
         ...
 ) {
         MapVals <- function(vec, from, to) {
@@ -140,7 +140,7 @@ FindAllMarkers_UMI <- function(
                                         mean.fxn = mean.fxn,
                                         fc.name = fc.name,
                                         base = base,
-                                        densify = densify,
+                                        #densify = densify,
                                         ...
                                 )
                         },
@@ -308,7 +308,7 @@ FindMarkers_UMI.default <- function(
         min.cells.group = 3,
         pseudocount.use = 1,
         fc.results = NULL,
-        densify = FALSE,
+        #densify = FALSE,
         ...
 ) {
         Seurat:::ValidateCellGroups(
@@ -382,7 +382,7 @@ FindMarkers_UMI.default <- function(
                 verbose = verbose,
                 min.cells.feature = min.cells.feature,
                 latent.vars = latent.vars,
-                densify = densify,
+                #densify = densify,
                 ...
         )
         print("PerformDE done !!")
@@ -441,8 +441,8 @@ FindMarkers_UMI.Assay <- function(
         mean.fxn = NULL,
         fc.name = NULL,
         base = 2,
-        densify = FALSE,
-        recorrect_umi = TRUE,
+        #densify = FALSE,
+        #recorrect_umi = TRUE,
         ...
 ) {
 
@@ -489,7 +489,7 @@ FindMarkers_UMI.Assay <- function(
                 min.cells.group = min.cells.group,
                 pseudocount.use = pseudocount.use,
                 fc.results = fc.results,
-                densify = densify,
+                #densify = densify,
                 ...
         )
         return(de.results)
@@ -524,8 +524,8 @@ FindMarkers_UMI.SCTAssay <- function(
         mean.fxn = NULL,
         fc.name = NULL,
         base = 2,
-        densify = FALSE,
-        recorrect_umi = TRUE,
+        #densify = FALSE,
+        recorrect_umi = FALSE,
         ...
 ) {
         data.slot <- ifelse(
@@ -593,7 +593,7 @@ FindMarkers_UMI.SCTAssay <- function(
                 min.cells.group = min.cells.group,
                 pseudocount.use = pseudocount.use,
                 fc.results = fc.results,
-                densify = densify,
+                #densify = densify,
                 ...
         )
         return(de.results)
@@ -626,7 +626,7 @@ FindMarkers_UMI.DimReduc <- function(
         pseudocount.use = 1,
         mean.fxn = rowMeans,
         fc.name = NULL,
-        densify = FALSE,
+        #densify = FALSE,
         ...
         
 ) {
@@ -679,7 +679,7 @@ FindMarkers_UMI.DimReduc <- function(
                 verbose = verbose,
                 min.cells.feature = min.cells.feature,
                 latent.vars = latent.vars,
-                densify = densify,
+                #densify = densify,
                 ...
         )
         de.results <- cbind(de.results, fc.results)
@@ -750,7 +750,7 @@ FindMarkers_UMI.Seurat <- function(
         mean.fxn = NULL,
         fc.name = NULL,
         base = 2,
-        densify = FALSE,
+        #densify = FALSE,
         ...
 ) {
         if (!is.null(x = group.by)) {
@@ -824,7 +824,7 @@ FindMarkers_UMI.Seurat <- function(
                 mean.fxn = mean.fxn,
                 base = base,
                 fc.name = fc.name,
-                densify = densify,
+                #densify = densify,
                 ...
         )
         return(de.results)
@@ -1008,7 +1008,7 @@ FoldChange.Seurat <- function(
                 data.use <- object[[reduction]]
                 cellnames.use <- rownames(data.use)
         }
-        cells <- IdentsToCells(
+        cells <- Seurat:::IdentsToCells(
                 object = object,
                 ident.1 = ident.1,
                 ident.2 = ident.2,
