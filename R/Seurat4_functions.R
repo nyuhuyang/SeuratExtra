@@ -2027,12 +2027,12 @@ FgseaDotPlot <- function(stats, pathways=NULL,
             order.yaxis = fgseaRes[[i]][order(fgseaRes[[i]][,order.yaxis.by[2]],
                                               decreasing = decreasing), "pathway"]
         }
-        if(!is.null(pval)) fgseaRes[[i]][fgseaRes[[i]]$pval > pval,fill] = NA
-        if(!is.null(padj)) fgseaRes[[i]][fgseaRes[[i]]$padj > padj,fill] = NA
+        if(!is.null(pval)) fgseaRes[[i]]$NES[fgseaRes[[i]]$pval > pval] = NA
+        if(!is.null(padj)) fgseaRes[[i]]$NES[fgseaRes[[i]]$padj > padj] = NA
         fgseaRes[[i]] = fgseaRes[[i]][complete.cases(fgseaRes[[i]]),]
         if(nrow(fgseaRes[[i]]) > 0 ) {
             fgseaRes[[i]]$cluster = clusters[i]
-        } else fgseaRes[[i]] =NA
+        } else fgseaRes[[i]] = NULL
         Progress(i, length(clusters))
     }
     df_fgseaRes <- dplyr::bind_rows(fgseaRes) %>% as.data.frame()
@@ -2076,6 +2076,8 @@ FgseaDotPlot <- function(stats, pathways=NULL,
         order.xaxis = colnames(mtx_fgseaRes)[colInd]
     }
     if(!is.null(order.xaxis)) {
+        order.xaxis = order.xaxis[order.xaxis %in% df_fgseaRes[,"cluster"]]
+        df_fgseaRes %<>% filter(cluster %in% order.xaxis)
         df_fgseaRes[,"cluster"] %<>% factor(levels = order.xaxis)
         df_fgseaRes %<>% with(df_fgseaRes[order(pathway,cluster),])
     }
@@ -3993,6 +3995,9 @@ VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value =
     } else {
             Up_gene_index = ""; Down_gene_index = ""
     }
+    # If too many gene with adj_p = 0
+    if(length(Up_gene_index) >top) Up_gene_index = head(Up_gene_index,top)
+    if(length(Down_gene_index) >top) Down_gene_index = tail(Down_gene_index,top)
     
     p<-ggplot(
         #设置数据
