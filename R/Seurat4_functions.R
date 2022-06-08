@@ -391,15 +391,15 @@ ChangeColorScale <- function(p1, alpha.use = 1,
 #' @param subject could be Seurat object, or gene names
 #' @example CheckSpecies("CD8A")
 #' @example CheckSpecies(object)
-CheckSpecies <- function(subject){
-        if(class(subject)=="Seurat"){
-                subject = rownames(subject)[1]
+CheckSpecies <- function(object){
+        if(class(object)=="Seurat"){
+                object = grep("^rpl|^Rpl",rownames(object), value = T)[1]
         }
         # Human gene
-        if(subject == toupper(subject))
+        if(object == toupper(object))
                 return("Human")
         # Mouse gene
-        if(subject == Hmisc::capitalize(tolower(subject)))
+        if(object == Hmisc::capitalize(tolower(object)))
                 return("Mouse") 
 
 }
@@ -2263,6 +2263,21 @@ FindAllMarkers.UMI <- function (object, assay = NULL, features = NULL, logfc.thr
     }
 
 
+
+# DoubletFinder
+# find histgram local maximam
+findLocalMaxima <- function(x) {
+        # Use -Inf instead if x is numeric (non-integer)
+        y <- diff(c(-.Machine$integer.max, x)) > 0L
+        rle(y)$lengths
+        y <- cumsum(rle(y)$lengths)
+        y <- y[seq.int(1L, length(y), 2L)]
+        if (x[[1]] == x[[2]]) {
+                y <- y[-1]
+        }
+        which(x == max(x[y]))
+}
+
 #' FindIdentLabel: Find identical label between ident and metadata
 #' @object seurat object
 #' @label colname in metadata
@@ -2935,6 +2950,28 @@ NoAxesLabel <- function (..., keep.text = FALSE, keep.ticks = FALSE)
     }
     return(no.axes.theme)
 }
+
+
+# DouletFinder
+Multiplet_Rate <- function(object, numBatches = 1, num10xRuns = 1){
+        
+        numCellsRecovered = 1.0 * ncol(object)
+        m = 4.597701e-06
+        r = 0.5714286
+        
+        numCellsLoaded = numCellsRecovered / r
+        multipletRate = m * numCellsLoaded / num10xRuns
+        
+        singletRate = 1.0 - multipletRate;
+        numSinglet = singletRate * numCellsRecovered
+        numMultiplet = numCellsRecovered - numSinglet
+        numIdentMultiplet = numMultiplet * (numBatches - 1) / numBatches
+        numNonIdentMultiplet = numMultiplet - numIdentMultiplet
+        numCells = numSinglet + numNonIdentMultiplet
+        
+        return(numNonIdentMultiplet/numCells)
+}
+
 
 Progress <- function(i,len){
     svMisc::progress(i/len*100)
