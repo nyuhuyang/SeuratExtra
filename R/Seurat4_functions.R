@@ -527,7 +527,7 @@ df2list <- function(df){
 }
 
 
-doubletFinder_v4 <- function(seu, PCs, pN = 0.25, pK, nExp, reuse.pANN = FALSE, sct = FALSE) {
+doubletFinder_v4 <- function(seu, PCs, pN = 0.25, pK, nExp, reuse.pANN = FALSE, sct = FALSE, annotations = NULL) {
     require(Seurat); require(fields); require(KernSmooth)
     
     ## Generate new list of doublet classificatons from existing pANN vector to save time
@@ -552,7 +552,16 @@ doubletFinder_v4 <- function(seu, PCs, pN = 0.25, pK, nExp, reuse.pANN = FALSE, 
         doublets <- (data[, real.cells1] + data[, real.cells2])/2
         colnames(doublets) <- paste("X", 1:n_doublets, sep = "")
         data_wdoublets <- cbind(data, doublets)
-        
+        # Keep track of the types of the simulated doublets
+        if(!is.null(annotations)){
+                stopifnot(typeof(annotations)=="character")
+                stopifnot(length(annotations)==length(Cells(seu)))
+                stopifnot(!any(is.na(annotations)))
+                annotations <- factor(annotations)
+                names(annotations) <- Cells(seu)
+                doublet_types1 <- annotations[real.cells1]
+                doublet_types2 <- annotations[real.cells2]
+        }
         ## Store important pre-processing information
         orig.commands <- seu@commands
         
@@ -626,14 +635,34 @@ doubletFinder_v4 <- function(seu, PCs, pN = 0.25, pK, nExp, reuse.pANN = FALSE, 
         ## Compute pANN
         print("Computing pANN...")
         pANN <- as.data.frame(matrix(0L, nrow = n_real.cells, ncol = 1))
+        if(!is.null(annotations)){
+                neighbor_types <- as.data.frame(matrix(0L, nrow = n_real.cells, ncol = length(levels(doublet_types1))))
+        }
         rownames(pANN) <- real.cells
         colnames(pANN) <- "pANN"
         k <- round(nCells * pK)
         for (i in 1:n_real.cells) {
             neighbors <- order(dist.mat[, i])
+            cat("i: ", i, "\n")
+            cat(neighbors, "\n")
             neighbors <- neighbors[2:(k + 1)]
             neighbor.names <- rownames(dist.mat)[neighbors]
             pANN$pANN[i] <- length(which(neighbors > n_real.cells))/k
+            if(!is.null(annotations)){
+                    for(ct in unique(annotations)){
+                            cat(neighbors, "\n")
+                            cat(n_real.cells, "\n")
+                            neighbors_that_are_doublets = neighbors[neighbors>n_real.cells]
+                            if(length(neighbors_that_are_doublets) > 0){
+                                    neighbor_types[i,] <-
+                                            table( doublet_types1[neighbors_that_are_doublets - n_real.cells] ) +
+                                            table( doublet_types2[neighbors_that_are_doublets - n_real.cells] )
+                                    neighbor_types[i,] <- neighbor_types[i,] / sum( neighbor_types[i,] )
+                            } else {
+                                    neighbor_types[i,] <- NA
+                            }
+                    }
+            }
         }
         
         print("Classifying doublets..")
@@ -641,6 +670,12 @@ doubletFinder_v4 <- function(seu, PCs, pN = 0.25, pK, nExp, reuse.pANN = FALSE, 
         classifications[order(pANN$pANN[1:n_real.cells], decreasing=TRUE)[1:nExp]] <- "Doublet"
         seu@meta.data[, paste("pANN",pN,pK,nExp,sep="_")] <- pANN[rownames(seu@meta.data), 1]
         seu@meta.data[, paste("DF.classifications",pN,pK,nExp,sep="_")] <- classifications
+        if(!is.null(annotations)){
+                colnames(neighbor_types) = levels(doublet_types1)
+                for(ct in levels(doublet_types1)){
+                        seu@meta.data[, paste("DF.doublet.contributors",pN,pK,nExp,ct,sep="_")] <- neighbor_types[,ct]
+                }
+        }
         return(seu)
     }
 }
