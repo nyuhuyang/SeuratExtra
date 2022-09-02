@@ -3014,7 +3014,7 @@ RunHarmony.1 <- function (object, group.by, dims.use, group.by.secondary = NULL,
                           theta = 1, theta2 = 1, sigma = 0.1, alpha = 0.1, nclust = 100, 
                           tau = 0, block.size = 0.05, max.iter.harmony = 10, max.iter.cluster = 200, 
                           epsilon.cluster = 1e-05, epsilon.harmony = 1e-04, burn.in.time = 10, 
-                          plot_convergence = FALSE)
+                          plot_convergence = FALSE,...)
 {
     if (!"Seurat" %in% class(object)) {
         stop("This Function is meant to be run on a Seurat object!")
@@ -3055,7 +3055,7 @@ RunHarmony.1 <- function (object, group.by, dims.use, group.by.secondary = NULL,
                                   object@meta.data[[group.by]], batches_secondary, theta, 
                                   theta2, sigma, alpha, nclust, tau, block.size, max.iter.harmony, 
                                   max.iter.cluster, epsilon.cluster, epsilon.harmony, 
-                                  burn.in.time, plot_convergence)
+                                  burn.in.time, plot_convergence,...)
     rownames(harmonyEmbed) <- row.names(object@meta.data)
     colnames(harmonyEmbed) <- paste0("harmony_", 1:ncol(harmonyEmbed))
     
@@ -4021,105 +4021,135 @@ TSNEPlot.1 <- function(object,dims = c(1, 2),cells = NULL, cols = NULL, pt.size 
 
 # VolcanoPlots to demonstrate Differential expressed genes
 # https://zhuanlan.zhihu.com/p/82785739?utm_source=ZHShareTargetIDMore&utm_medium=social&utm_oi=642996063045423104
-VolcanoPlots <- function(data, cut_off = c("p_val_adj","p_val"), cut_off_value = 0.05, cut_off_logFC = 0.25,top = 15,
-                         sort.by = "p_val_adj",genes = "",
-                         cols = c("#ba2832","#d2dae2","#2a71b2"),
-                         cols.order = c('Upregulated','Stable','Downregulated'),
-                         alpha=0.8, size=2,font.size = size,
-                         legend.size = 12, legend.position = "bottom",force = 2, ...) {
-    data %<>% as.data.frame()
-    data[,paste0("log10_",cut_off[1])] = -log10(data[,cut_off[1]])
-    inf = is.infinite(data[,paste0("log10_",cut_off[1])])
-    data[inf,paste0("log10_",cut_off[1])] = 350
-    data$change = ifelse(data[,cut_off[1]] < cut_off_value &
-                             abs(data$avg_log2FC) >= cut_off_logFC,
-                         ifelse(data$avg_log2FC > cut_off_logFC ,'Upregulated','Downregulated'),
-                         'Stable')
-    rownames(data) = data$gene
-    genes = genes[genes %in% data$gene]
-    cols.order = switch (legend.position,
-                         "bottom" = rev(cols.order),
-                         "right" = cols.order
-    )
-    cols = switch (legend.position,
-                 "bottom" = rev(cols),
-                 "right" = cols.order
-    )
-    if(!is.null(cols.order)) data$change %<>% as.factor() %>% factor(levels = cols.order)
-
-    colnames(data)[grep("cluster",colnames(data))]="cluster"
-    # 将需要标记的基因放置在单独的数组
-    if(top > 0) {
-            Up <- data[data$change %in% "Upregulated",]
-            Down <- data[data$change %in% "Downregulated",]
-            if(sort.by == "p_val_adj") {
-                    Up_gene_index <- rownames(Up)[Up[,sort.by] <= tail(head(sort(Up[,sort.by],decreasing = F),top),1)]
-                    Down_gene_index <- rownames(Down)[Down[,sort.by] <= tail(head(sort(Down[,sort.by],decreasing = F),top),1)]
-            }
-            if(sort.by == "avg_log2FC") {
-                    Up_gene_index <- rownames(Up)[Up[,sort.by] >= tail(head(sort(Up[,sort.by],decreasing = T),top),1)]
-                    Down_gene_index <- rownames(Down)[Down[,sort.by] <= tail(head(sort(Down[,sort.by],decreasing = F),top),1)]
-            }
-    } else {
-            Up_gene_index = ""; Down_gene_index = ""
-    }
-    # If too many gene with adj_p = 0
-    if(length(Up_gene_index) >top) Up_gene_index = head(Up_gene_index,top)
-    if(length(Down_gene_index) >top) Down_gene_index = tail(Down_gene_index,top)
-    
-    p<-ggplot(
-        #设置数据
-        data, 
-        mapping = aes_string(x = "avg_log2FC", 
-                             y = paste0("log10_",cut_off[1]),
-                             fill = "change"))+
-       geom_point(color = "black", pch=21, alpha=alpha, size=size)
+VolcanoPlots <- function(data, cut_off =c("p_val_adj","p_val","score")[1], cut_off_value = 0.05,
+                         cut_off_logFC = 0.25,cut_off_ptc = 10, top = 15,
+                         sort.by = "p_val_adj",cols = c("#4575B4", "#74ADD1", "#E0F3F8", "#FEE090", "#F46D43"),
+                         cols.inv = FALSE, alpha=0.9, pt.size=3, font.size=12,lab.size=6,
+                         subtitle = NULL,inplab1 = c("No labels", "black text","black labels","color text","color labels")[3],inplab2,
+                         legend.show = TRUE,legend.size = 12, legend.position = "bottom",force = 5, ...){
+        # Identify genes that are in our dataset
+        if(cols.inv) cols = rev(cols)
+        cols.order =c("Most Down","Down","Stable","Up","Most Up")
+        names(cols) = cols.order
+        if(legend.position == "right") cols.order = rev(cols.order)
+        
+        data[,paste0("log10_",cut_off)] = -log10(data[,cut_off])
+        inf = is.infinite(data[,paste0("log10_",cut_off)])
+        data[inf,paste0("log10_",cut_off)] = 337
+        data[,"change"] = "Stable"
+        data %<>% filter(pct.1 > cut_off_ptc/100)
+        data[data[,cut_off] <= cut_off_value & data$avg_log2FC > 0,"change"] = "Up"
+        data[data[,cut_off] <= cut_off_value & data$avg_log2FC < 0,"change"] = "Down"
+        
+        data[data$avg_log2FC > cut_off_logFC & data[,cut_off]  < cut_off_value,"change"] = "Most Up"
+        data[data$avg_log2FC < -cut_off_logFC & data[,cut_off]  < cut_off_value,"change"] = "Most Down"
+        
+        data$change %<>% factor(levels = cols.order)
+        colnames(data)[grep("cluster",colnames(data))]="cluster"
+        # 将需要标记的基因放置在单独的数组
+        Up <- data[data$change %in% "Most Up",]
+        Down <- data[data$change %in% "Most Down",]
+        top %<>% as.integer()
+        if(sort.by %in% c("p_val_adj","p_val")) {
+                Up_gene_index <- rownames(Up)[Up[,sort.by] <= tail(head(sort(Up[,sort.by],decreasing = F),top),1)]
+                Down_gene_index <- rownames(Down)[Down[,sort.by] <= tail(head(sort(Down[,sort.by],decreasing = F),top),1)]
+        }
+        if(sort.by == "avg_log2FC") {
+                Up_gene_index <- rownames(Up)[Up[,sort.by] >= tail(head(sort(Up[,sort.by],decreasing = T),top),1)]
+                Down_gene_index <- rownames(Down)[Down[,sort.by] <= tail(head(sort(Down[,sort.by],decreasing = F),top),1)]
+        }
+        # If too many gene with adj_p = 0
+        if(length(Up_gene_index) >top) Up_gene_index = head(Up_gene_index,top)
+        if(length(Down_gene_index) >top) Down_gene_index = tail(Down_gene_index,top)
+        # prepare title
+        if(is.null(subtitle)) {
+                cluster = stringr::str_split(data$cluster[1],patter = " vs.")[[1]]
+                subtitle = paste(rev(cluster),collapse = " <----    ----> ")
+        }
+        ggOut<-ggplot(
+                #设置数据
+                data,
+                mapping = aes_string(x = "avg_log2FC",
+                                     y = paste0("log10_",cut_off),
+                                     fill = "change"))+
+                geom_point(alpha= alpha,size=pt.size,color = "black", pch=21)+
+                ggtitle(label = subtitle)
+        
         # 辅助线
-    p = p + geom_vline(xintercept=c(-cut_off_logFC,cut_off_logFC),lty=4,col="black",lwd=0.8)
-    p = p + geom_hline(yintercept = -log10(cut_off_value),lty=4,col="black",lwd=0.8)
+        ggOut = ggOut + geom_vline(xintercept=c(-cut_off_logFC,cut_off_logFC),lty=4,col="black",lwd=0.8)
+        ggOut = ggOut + geom_hline(yintercept = -log10(cut_off_value),lty=4,col="black",lwd=0.8)
         
         # 坐标轴
-    p = p + theme_bw()+
-        labs(x="log2(fold change)",
-             y= paste("-log10 (",ifelse(cut_off[1] == "p_val_adj", "adjusted p-value","p-value"),")"))+
+        ggOut = ggOut + theme_bw(base_size = font.size)+
+                #cowplot::theme_cowplot(font_size = 12)+
+                labs(x="log2(fold change)",
+                     y= paste("-log10 (",ifelse(cut_off == "p_val_adj", "adjusted p-value","p-value"),")"))+
+                
+                # 图例
+                theme(plot.title = element_text(hjust = 0.5),
+                      axis.title=element_text(size=font.size),
+                      legend.title = element_blank(),
+                      legend.text = element_text(size = font.size),
+                      legend.position = switch (as.character(legend.show),
+                                                "FALSE" = "none",
+                                                "TRUE" = legend.position),
+                )
+        ggOut = ggOut + scale_fill_manual("",values=cols[sort(unique(data$change),decreasing = F)])
         
-        # 图例
-        theme(plot.title = element_text(hjust = 0.5), 
-              axis.title=element_text(size=12),
-              legend.position=legend.position, 
-              legend.title = element_blank(),
-              legend.text = element_text(size = legend.size),
-        )
-    if(!is.null(cols.order)) names(cols) = cols.order
-    
-    if(top > 0 & length(c(Down_gene_index, Up_gene_index)) > 0){
-            p = p + ggrepel::geom_text_repel(data = data[c(Down_gene_index, Up_gene_index),], 
-                                             aes(label = gene),
-                                             size = font.size,
-                                             force = force,
-                                             box.padding = unit(1, "lines"),
-                                             point.padding = unit(1, "lines"), 
-                                             segment.color = "black", 
-                                             show.legend = FALSE,
-                                             max.overlaps = Inf,
-                                             ...)   
-    }
-    if(any(genes %in% data$gene)){
-            p = p + ggrepel::geom_text_repel(data = data[genes,], 
-                                             aes(label = gene),
-                                             size = font.size,
-                                             force = force,
-                                             box.padding = unit(1, "lines"),
-                                             point.padding = unit(1, "lines"), 
-                                             segment.color = "black", 
-                                             show.legend = FALSE,
-                                             max.overlaps = Inf,
-                                             ...)   
-    }
-    #p = p + scale_colour_manual(values=cols[unique(data$change)])
-    p = p + scale_fill_manual(values=cols[unique(data$change)])
-    return(p)
+        if(inplab1 != "No labels" & length(c(Down_gene_index, Up_gene_index)) > 0){
+                options(ggrepel.max.overlaps = Inf)
+                lab_data = data[c(Down_gene_index, Up_gene_index),]
+                lab_data$change %<>% plyr::mapvalues(from = unique(lab_data$change),
+                                                     to = cols[unique(lab_data$change)])
+                ggOut = ggOut + switch(inplab1,
+                                       "black text" = geom_text_repel(data = lab_data,
+                                                                      aes_string(x = "avg_log2FC",
+                                                                                 y = paste0("log10_",cut_off),
+                                                                                 label = "gene"),
+                                                                      colour = "grey10",
+                                                                      bg.color = "grey95", bg.r = 0.15,
+                                                                      force = force,
+                                                                      box.padding = unit(0.8, "lines"),
+                                                                      point.padding = unit(1, "lines"),
+                                                                      size = lab.size, seed = 42),
+                                       "black labels" = geom_label_repel(data = lab_data,
+                                                                         aes_string(x = "avg_log2FC",
+                                                                                    y = paste0("log10_",cut_off),
+                                                                                    label = "gene"),
+                                                                         colour = "grey10",
+                                                                         fill = "white",
+                                                                         alpha = alpha,
+                                                                         force = force,
+                                                                         box.padding = unit(0.8, "lines"),
+                                                                         point.padding = unit(1, "lines"),
+                                                                         size = lab.size, seed = 42),
+                                       "color text" = geom_text_repel(data = lab_data,
+                                                                      aes_string(x = "avg_log2FC",
+                                                                                 y = paste0("log10_",cut_off),
+                                                                                 label = "gene"),
+                                                                      colour = lab_data$change,
+                                                                      bg.color = "grey95", bg.r = 0.15,
+                                                                      force = force,
+                                                                      box.padding = unit(0.8, "lines"),
+                                                                      point.padding = unit(1, "lines"),
+                                                                      size = lab.size, seed = 42),
+                                       "color labels" = geom_label_repel(data = lab_data,
+                                                                         aes_string(x = "avg_log2FC",
+                                                                                    y = paste0("log10_",cut_off),
+                                                                                    label = "gene"),
+                                                                         colour = lab_data$change,
+                                                                         fill = "white",
+                                                                         alpha = alpha,
+                                                                         force = force,
+                                                                         box.padding = unit(0.8, "lines"),
+                                                                         point.padding = unit(1, "lines"),
+                                                                         size = lab.size, seed = 42)
+                                       
+                )
+        }
+        return(ggOut)
 }
+
 
 
 #' Modified UMAPPlot
