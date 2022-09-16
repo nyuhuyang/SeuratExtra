@@ -4166,7 +4166,7 @@ UMAPPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size =
                        legend.size = 15,
                        cells.highlight = NULL,cols.highlight = 'red',sizes.highlight = 1,
                        na.value = 'gray97',combine = TRUE,ncol = NULL,title = NULL,legend.title = NULL,
-                       no.legend = F,do.print = F,do.return = T,unique.name=F,
+                       no.legend = F,do.print = F,do.return = F,unique.name=F,
                        units= "in",width=10, height=7,hjust = 0.5,border = FALSE,
                        save.path = NULL,file.name = NULL,...) {
     if(is.null(file.name)){
@@ -4210,7 +4210,7 @@ UMAPPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size =
                                        pt.size = pt.size, shape.by = shape.by, order = order,
                                        label = FALSE, cells.highlight = cells.highlight,
                                        cols.highlight = cols.highlight, sizes.highlight = sizes.highlight,
-                                       na.value = na.value,...)
+                                       na.value = na.value)
         if (label & label.repel == F ) {
             plot <- LabelClusters(plot = plot, id = x, repel = repel,
                                   size = label.size, split.by = split.by)
@@ -4261,7 +4261,7 @@ UMAPPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size =
         if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
         if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
         jpeg(paste0(save.path, "/", file.name), units=units, width=width, height=height,res=600)
-        print(plots)
+        print(plot)
         dev.off()
     }
     #if(do.return & Sys.info()[['sysname']] != "Linux") return(plots)
