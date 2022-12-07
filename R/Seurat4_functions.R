@@ -1629,9 +1629,10 @@ eulerr <- function(df, group.by = "cluster",key = NULL, cut_off = "avg_log2FC",c
                    do.lenged = TRUE,do.return = TRUE, return.raw = FALSE,
                    do.print = FALSE,save.path = NULL,file.name =NULL,
                    shape = c("circle", "ellipse"),units="in", width=7, height=7,res=600,...){
+        if(!(class(df) == "data.frame")[1]) df %<>% as.data.frame()
         df[,group.by] %<>% as.vector
         df$gene %<>% as.vector()
-        if(!is.null(key)) df <- df[(df[,group.by]%in% key),]
+        if(!is.null(key)) df <- df[(df[,group.by] %in% key),]
         df_list <- split(df,df[,group.by])
         
         if(cut_off == "avg_log2FC"){
@@ -2045,10 +2046,14 @@ FgseaDotPlot <- function(stats, pathways=NULL,
     
     clusters = unique(as.character(stats$cluster))
     message("Calculate fgsea for each cluster.")
+    
+    stats[stats$p_val == 0,"p_val"] = min(stats[stats$p_val > 0,"p_val"], .Machine$double.xmin)
+    stats$log2FC_log10p = stats$avg_log2FC*(-log10(stats$p_val))
+    
     fgseaRes <- list()
     for(i in seq_along(clusters)){
         geneRank = stats[stats$cluster == clusters[i],]
-        geneRank = geneRank[order(geneRank["avg_log2FC"]),c("gene","avg_log2FC")]  %>% tibble::deframe()
+        geneRank = geneRank[order(geneRank["log2FC_log10p"]),c("gene","log2FC_log10p")]  %>% tibble::deframe()
         fgseaRes[[i]] <- fgseaMultilevel(pathways=pathways, stats=geneRank,eps = 0)
         leadingEdges= sapply(fgseaRes[[i]][,"leadingEdge"]$leadingEdge,function(x) paste(x,collapse = ","))
         fgseaRes[[i]][,"leadingEdge"] =leadingEdges
@@ -3958,7 +3963,8 @@ TSNEPlot.1 <- function(object,dims = c(1, 2),cells = NULL, cols = NULL, pt.size 
                                        pt.size = pt.size, shape.by = shape.by, order = order,
                                        label = FALSE, cells.highlight = cells.highlight,
                                        cols.highlight = cols.highlight, sizes.highlight = sizes.highlight,
-                                       na.value = na.value,...)
+                                       na.value = na.value,...)+
+                theme(plot.title = element_text(hjust = hjust,size=title.size,face = "plain"))
         if (label & label.repel == F ) {
             plot <- LabelClusters(plot = plot, id = x, repel = repel,
                                   size = label.size, split.by = split.by)
@@ -4205,24 +4211,26 @@ UMAPPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size =
         data[, split.by] <- object[[split.by, drop = TRUE]]
     }
     plots <- lapply(X = group.by, FUN = function(x) {
-        plot <- Seurat:::SingleDimPlot(data = data[, c(dims, x, split.by, shape.by)],
+        Plot <- Seurat:::SingleDimPlot(data = data[, c(dims, x, split.by, shape.by)],
                                        dims = dims, col.by = x, cols = cols,
                                        pt.size = pt.size, shape.by = shape.by, order = order,
                                        label = FALSE, cells.highlight = cells.highlight,
                                        cols.highlight = cols.highlight, sizes.highlight = sizes.highlight,
-                                       na.value = na.value)
+                                       na.value = na.value)+
+                theme(plot.title = element_text(hjust = hjust,size=title.size,face = "plain"))
+                
         if (label & label.repel == F ) {
-            plot <- LabelClusters(plot = plot, id = x, repel = repel,
+                Plot <- LabelClusters(plot = Plot, id = x, repel = repel,
                                   size = label.size, split.by = split.by)
         }
         if (label & label.repel) {
-            plot <- LabelRepel(plot = plot, id = x, repel = repel,
+                Plot <- LabelRepel(plot = Plot, id = x, repel = repel,
                                size = label.size, split.by = split.by, color= cols,
                                alpha = alpha)
         }
-        if(alpha != 1 ) plot <- plot + scale_fill_manual(values = alpha(.3))
+        if(alpha != 1 ) Plot <- Plot + scale_fill_manual(values = alpha(.3))
         if (!is.null(x = split.by)) {
-            plot <- plot + theme(strip.background = element_blank(),
+                Plot <- Plot + theme(strip.background = element_blank(),
                                  strip.text = element_text(face="plain",size=text.size))+
                 facet_wrap(facets = vars(!!sym(x = split.by)),
                            ncol = if (length(x = group.by) > 1 || is.null(x = ncol)) {
@@ -4230,9 +4238,9 @@ UMAPPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size =
                            } else ncol )
             
         }
-        if(border == TRUE) plot = plot + NoAxesLabel() +
+        if(border == TRUE) Plot = Plot + NoAxesLabel() +
                 theme(panel.border = element_rect(colour = "black"))
-        return(plot)
+        return(Plot)
     })
     if (combine) {
         plots <- patchwork::wrap_plots(plots = plots, ncol = if (!is.null(x = split.by) &&
@@ -4261,7 +4269,7 @@ UMAPPlot.1 <- function(object,dims = c(1, 2),cells = NULL,cols = NULL, pt.size =
         if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
         if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
         jpeg(paste0(save.path, "/", file.name), units=units, width=width, height=height,res=600)
-        print(plot)
+        print(plots)
         dev.off()
     }
     #if(do.return & Sys.info()[['sysname']] != "Linux") return(plots)
