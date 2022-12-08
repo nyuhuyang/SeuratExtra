@@ -4098,7 +4098,7 @@ VolcanoPlots <- function(data, cut_off =c("p_val_adj","p_val","score")[1], cut_o
                       legend.text = element_text(size = font.size),
                       legend.position = switch (as.character(legend.show),
                                                 "FALSE" = "none",
-                                                "TRUE" = legend.position),
+                                                "TRUE" = legend.position)
                 )
         ggOut = ggOut + scale_fill_manual("",values=cols[sort(unique(data$change),decreasing = F)])
         
@@ -4158,7 +4158,7 @@ VolcanoPlots <- function(data, cut_off =c("p_val_adj","p_val","score")[1], cut_o
 
 
 
-#' Modified UMAPPlot
+#' UMAPPlot wrapper
 #' @param label.repel
 #' @param no.legend remove legend
 #' @param title add ggplot title
