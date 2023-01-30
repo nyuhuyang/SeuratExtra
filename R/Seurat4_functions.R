@@ -747,7 +747,7 @@ DoHeatmap.1 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
 #' instead of adding additional heatmap, produce additonal annotation bar(s) on top of heatmap, 
 #' @param group1.colors hex color character vector matching to group.by[1]
 #' @param group2.colors hex color character vector matching to group.by[2]
-#' @param ... if length(group.by) >= 3, assign group3.colors, group4.colors ...
+#' @param ... if length(group.by) >= 3, assign group3.colors, group4.colors, outside function...
 #' @param colors hex color character vector for heatmap, default is Seurat::PurpleAndYellow(), or ggsci::pal_gsea()(12)
 #' @param position gene name position
 #' @param nrow pass to wrap_plots
@@ -766,7 +766,7 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                         cex.row=12,legend.size = 12,
                         nrow = 5, ncol = 6, design = c(patchwork::area(1, 1, 5, 5),
                                                        patchwork::area(3, 6, 3, 6)),
-                        units="in", width=10, height=7,res=600,...){
+                        units="in", width=10, height=7,res=600){
         if(is.null(file.name)){
                 v <- UniqueName(object = object, fileName = deparse(substitute(object)), 
                                 unique.name = T)
@@ -859,20 +859,7 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                                          colors = colors,
                                          disp.min = disp.min, disp.max = disp.max, feature.order = features, 
                                          cell.order = names(x = sort(x = group.use)), group.by = group.use)
-        if(!no.legend) {
-                plot = plot + guides(color = guide_legend(override.aes = list(shape = 15,alpha=1,size = legend.size*0.8)))+
-                        theme(legend.text = element_text(size = legend.size),
-                              legend.title = element_text(size = legend.size*1.2))
-                }
         plot <- plot + theme(line = element_blank())
-        if(!is.null(title)) {
-                plot = plot+ ggtitle(title)+
-                        theme(plot.title = element_text(size=title.size, hjust = 0.5,face="plain"))
-        }
-        plot = plot + scale_y_discrete(position = position)
-        plot = plot + theme(axis.text.y = element_text(size = cex.row,colour = "black"))
-
-        if(no.legend) plot = plot + NoLegend()
         if (group.bar) {
                 default.colors <- c(scales::hue_pal()(length(x = levels(x = group.use))))
                 if (!is.null(x = names(x = group1.colors))) {
@@ -969,6 +956,19 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                         }
                 }
         }
+        if(no.legend) {
+                plot = plot + NoLegend()
+        } else {
+                plot = plot + guides(color = guide_legend(override.aes = list(shape = 15,alpha=1,size = legend.size*0.8)))+
+                        theme(legend.text = element_text(size = legend.size),
+                              legend.title = element_text(size = legend.size*1.2))
+        }
+        if(!is.null(title)) {
+                plot = plot+ ggtitle(title)+
+                        theme(plot.title = element_text(size=title.size, hjust = 0.5,face="plain"))
+        }
+        plot = plot + scale_y_discrete(position = position)
+        plot = plot + theme(axis.text.y = element_text(size = cex.row,colour = "black"))
         if(do.print){
                 if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
                 if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
@@ -2956,13 +2956,9 @@ MakeUniqueGenes <- function(object, features, verbose = T){
         scale.data = object
     } else stop("expression profile must be provided")
 
-    for (i in 1:length(dupFeaturesIndex)){
-        if(verbose) svMisc::progress(i/length(dupFeaturesIndex)*100)
-        scale.data <- rbind(scale.data, 
-                            "dupGene" = scale.data[features[dupFeaturesIndex[i]], ])
-        rownames(scale.data)[nrow(scale.data)] = featuresNum[dupFeaturesIndex[i]]
-        if(i == length(dupFeaturesIndex)) cat("Done!\n")
-    }
+    dup_scale.data <- scale.data[features[dupFeaturesIndex], ]
+    scale.data <- rbind(scale.data,dup_scale.data)
+    rownames(dup_scale.data) <- featuresNum[dupFeaturesIndex]
     if(class(object) == "Seurat") {
         object[[assay]]@scale.data = scale.data
         return(object)
