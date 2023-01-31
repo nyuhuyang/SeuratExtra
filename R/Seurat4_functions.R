@@ -860,6 +860,12 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                                          disp.min = disp.min, disp.max = disp.max, feature.order = features, 
                                          cell.order = names(x = sort(x = group.use)), group.by = group.use)
         plot <- plot + theme(line = element_blank())
+        if(!is.null(title)) {
+                plot = plot+ ggtitle(title)+
+                        theme(plot.title = element_text(size=title.size, hjust = 0.5,face="plain"))
+        }
+        plot = plot + scale_y_discrete(position = position)
+        plot = plot + theme(axis.text.y = element_text(size = cex.row,colour = "black"))
         if (group.bar) {
                 default.colors <- c(scales::hue_pal()(length(x = levels(x = group.use))))
                 if (!is.null(x = names(x = group1.colors))) {
@@ -963,12 +969,6 @@ DoHeatmap.2 <- function(object, dge_markers = NULL,features = NULL, cells = NULL
                         theme(legend.text = element_text(size = legend.size),
                               legend.title = element_text(size = legend.size*1.2))
         }
-        if(!is.null(title)) {
-                plot = plot+ ggtitle(title)+
-                        theme(plot.title = element_text(size=title.size, hjust = 0.5,face="plain"))
-        }
-        plot = plot + scale_y_discrete(position = position)
-        plot = plot + theme(axis.text.y = element_text(size = cex.row,colour = "black"))
         if(do.print){
                 if(is.null(save.path)) save.path <- paste0("output/",gsub("-","",Sys.Date()))
                 if(!dir.exists(save.path)) dir.create(save.path, recursive = T)
