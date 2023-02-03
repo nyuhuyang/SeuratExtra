@@ -392,14 +392,12 @@ ChangeColorScale <- function(p1, alpha.use = 1,
 #' @example CheckSpecies("CD8A")
 #' @example CheckSpecies(object)
 CheckSpecies <- function(object){
-        if(class(object)=="Seurat"){
-                object = grep("^rpl|^Rpl",rownames(object), value = T)[1]
-        }
+        genes = grep("^rpl|^Rpl|^RPL",rownames(object), value = T)[1]
         # Human gene
-        if(object == toupper(object))
+        if(genes == toupper(genes))
                 return("Human")
         # Mouse gene
-        if(object == Hmisc::capitalize(tolower(object)))
+        if(genes == Hmisc::capitalize(tolower(genes)))
                 return("Mouse") 
 
 }
@@ -2957,8 +2955,9 @@ MakeUniqueGenes <- function(object, features, verbose = T){
     } else stop("expression profile must be provided")
 
     dup_scale.data <- scale.data[features[dupFeaturesIndex], ]
-    scale.data <- rbind(scale.data,dup_scale.data)
     rownames(dup_scale.data) <- featuresNum[dupFeaturesIndex]
+    scale.data <- rbind(scale.data,dup_scale.data)
+    
     if(class(object) == "Seurat") {
         object[[assay]]@scale.data = scale.data
         return(object)
