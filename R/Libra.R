@@ -375,7 +375,9 @@ find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
         if (n_distinct(targets$group) != 2) return(NULL)
         # create design
         design = model.matrix(~ group, data = targets)
-        
+        groups <- switch(class(targets$group),
+                         factor = levels(targets$group),
+                         unique(targets$group))
         DE <- switch(de_method,
                     edgeR = {
                             tryCatch({
@@ -395,7 +397,7 @@ find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
                                             as.data.frame() %>%
                                             rownames_to_column('gene') %>%
                                             # flag metrics in results
-                                            mutate(cluster = paste(levels(meta$label)[1],"vs",levels(meta$label)[2]),
+                                            mutate(cluster = paste(groups[1],"vs",groups[2]),
                                                    de_method = paste0('pseudobulk ',de_method,"-",de_type))
                             }, error = function(e) {
                                     message(e)
