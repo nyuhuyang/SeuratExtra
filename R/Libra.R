@@ -255,6 +255,8 @@ run_de.1 = function(input,
                       avg_logFC,
                       p_val,
                       p_val_adj,
+                      log2UMI.1,
+                      log2UMI.2,
                       cluster,
                       cell_type,
                       de_method
@@ -367,7 +369,7 @@ pseudobulk_de.1 = function(input,
     if(nrow(results) == 0){
             print("no gene is significantly differentially expressed.")
             return(NULL)
-    } else return(results[,c("gene","logFC","logCPM","LR","PValue","FDR","cluster","cell_type","de_method")])
+    } else return(results[,c("gene","logFC","logCPM","LR","PValue","FDR","log2UMI.1","log2UMI.2","cluster","cell_type","de_method")])
 }
 
 
@@ -421,7 +423,9 @@ find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
                                             as.data.frame() %>%
                                             rownames_to_column('gene') %>%
                                             # flag metrics in results
-                                            mutate(cluster = paste(ident.1,"vs",ident.2),
+                                            mutate(log2UMI.1 = log2(rowSums(x[,targets$group == ident.1])),
+                                                   log2UMI.2 = log2(rowSums(x[,targets$group == ident.2])),
+                                                   cluster = paste(ident.1,"vs",ident.2),
                                                    de_method = paste0('pseudobulk ',de_method,"-",de_type))
                             }, error = function(e) {
                                     message(e)
@@ -455,7 +459,9 @@ find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
                                     res = as.data.frame(res) %>%
                                             mutate(gene = rownames(x)) %>%
                                             # flag metrics in results
-                                            mutate(cluster = paste(ident.1,"vs",ident.2),
+                                            mutate(log2UMI.1 = log2(rowSums(x[,targets$group == ident.1])),
+                                                   log2UMI.2 = log2(rowSums(x[,targets$group == ident.2])),
+                                                   cluster = paste(ident.1,"vs",ident.2),
                                                    de_method = paste0('pseudobulk ',de_method,"-",de_type))
                             }, error = function(e) {
                                     message(e)
@@ -490,7 +496,9 @@ find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
                                             topTable(number = Inf, coef = -1) %>%
                                             tibble::rownames_to_column('gene') %>%
                                             # flag metrics in results
-                                            mutate(cluster = paste(ident.1,"vs",ident.2),
+                                            mutate(log2UMI.1 = log2(rowSums(x[,targets$group == ident.1])),
+                                                   log2UMI.2 = log2(rowSums(x[,targets$group == ident.2])),
+                                                   cluster = paste(ident.1,"vs",ident.2),
                                                    de_method = paste0('pseudobulk ',de_method,"-",de_type))
                             }, error = function(e) {
                                     message(e)
