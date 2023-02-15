@@ -18,7 +18,7 @@ library(purrr)
 library(stats)
 library(tester)
 library(tibble)
-
+library(Libra)
 
 #' Add loop for comparison when more than 2 groups differenial analysis.
 #' @examples 
@@ -52,6 +52,8 @@ library(tibble)
 #'   information. Defaults to \code{cell_type}.
 #' @param label_col the vector in \code{meta} containing the experimental
 #'   label. Defaults to \code{label}.
+#' @param ident.1 Identity class to define markers for; if NULL, use all groups for comparison
+#' @param ident.2 A second identity class for comparison; if NULL, use all other cells for comparison
 #' @param min_cells the minimum number of cells in a cell type to retain it.
 #'   Defaults to \code{3}.
 #' @param min_reps the minimum number of replicates in a cell type to retain it.
@@ -153,19 +155,25 @@ library(tibble)
 #' @importFrom magrittr  %<>%
 #' @importFrom forcats fct_recode
 #' @importFrom dplyr group_by mutate select ungroup arrange
-#' @export
-#'
+#' @examples data("hagai_toy")
+#' hagai_toy@meta.data[hagai_toy$label == "unst" & hagai_toy$replicate == "mouse1","label"] <- "new_condition"
+#' DE <- run_de.1(hagai_toy,min_reps = 1)
+#' DE <- run_de.1(hagai_toy,min_reps = 1, ident.2 = "new_condition")
+#' DE <- run_de.1(hagai_toy,min_reps = 1, ident.1 = "lps4")
 run_de.1 = function(input,
                   meta = NULL,
                   replicate_col = 'replicate',
                   cell_type_col = 'cell_type',
                   label_col = 'label',
-                  min_cells = 3,
-                  min_reps = 2,
-                  min_features = 0,
                   de_family = 'pseudobulk',
                   de_method = 'edgeR',
                   de_type = 'LRT',
+                  ident.1 = NULL,
+                  ident.2 = NULL,
+                  min_cells = 3,
+                  min_reps = 1,
+                  min_features = 0,
+
                   n_threads = 2) {
     
     # first, make sure inputs are correct
@@ -186,6 +194,8 @@ run_de.1 = function(input,
                     replicate_col = replicate_col,
                     cell_type_col = cell_type_col,
                     label_col = label_col,
+                    ident.1 = ident.1, 
+                    ident.2 = ident.2,
                     min_cells = min_cells,
                     min_reps = min_reps,
                     min_features = min_features,
@@ -247,10 +257,12 @@ run_de.1 = function(input,
                       p_val_adj,
                       cluster,
                       cell_type,
-                      de_method,
+                      de_method
         ) %>%
-        ungroup() %>%
-        arrange(cell_type, gene)
+        group_by(cluster) %>%
+        arrange(desc(avg_logFC), .by_group = TRUE) %>%
+        ungroup()
+        
     return(DE)
 }
 
@@ -279,6 +291,8 @@ run_de.1 = function(input,
 #'   Defaults to edgeR.
 #' @param de_type the specific parameter of the differential expression testing
 #'   method. Defaults to LRT for edgeR, LRT for DESeq2, and trend for limma.
+#' @param ident.1 Identity class to define markers for; if NULL, use all groups for comparison
+#' @param ident.2 A second identity class for comparison; if NULL, use all other cells for comparison
 #' @return a data frame containing differential expression results.
 #'  
 #' @importFrom magrittr %<>%
@@ -298,6 +312,8 @@ pseudobulk_de.1 = function(input,
                          replicate_col = 'replicate',
                          cell_type_col = 'cell_type',
                          label_col = 'label',
+                         ident.1 = NULL,
+                         ident.2 = NULL,
                          min_cells = 3,
                          min_reps = 2,
                          min_features = 0,
@@ -330,6 +346,9 @@ pseudobulk_de.1 = function(input,
             # create targets matrix
             targets = data.frame(group_sample = colnames(x)) %>%
                     mutate(group = gsub(".*\\:", "", group_sample))
+            if(!is.null(ident.1) & !any(ident.1 %in% targets$group)) return(NULL)
+            if(!is.null(ident.2) & !any(ident.2 %in% targets$group)) return(NULL)
+            
             ## optionally, carry over factor levels from entire dataset
             if (is.factor(meta$label)) {
                     targets$group %<>% factor(levels = levels(meta$label))
@@ -338,13 +357,17 @@ pseudobulk_de.1 = function(input,
             if (n_distinct(targets$group) >= 2) {
                     find_all_pseudobulk_de(x, targets,de_family = de_family,
                                        de_method = de_method,
-                                       de_type = de_type)
+                                       de_type = de_type,
+                                       ident.1 = ident.1, ident.2 = ident.2)
             } else return(NULL)
             
             
     })
     results %<>% bind_rows(.id = 'cell_type')
-    return(results[,c("gene","logFC","logCPM","LR","PValue","FDR","cluster","cell_type","de_method")])
+    if(nrow(results) == 0){
+            print("no gene is significantly differentially expressed.")
+            return(NULL)
+    } else return(results[,c("gene","logFC","logCPM","LR","PValue","FDR","cluster","cell_type","de_method")])
 }
 
 
@@ -356,6 +379,8 @@ pseudobulk_de.1 = function(input,
 #'   Defaults to edgeR.
 #' @param de_type the specific parameter of the differential expression testing
 #'   method. Defaults to LRT for edgeR, LRT for DESeq2, and trend for limma.
+#' @param ident.1 Identity class to define markers for; if NULL, use all groups for comparison
+#' @param ident.2 A second identity class for comparison; if NULL, use all other cells for comparison
 #' @return a data frame containing differential expression results.
 #'  
 #' @importFrom magrittr %<>%
@@ -371,13 +396,12 @@ pseudobulk_de.1 = function(input,
 #' @examples find_pseudobulk_de(x, targets,de_family = 'pseudobulk',de_method = 'edgeR',de_type = 'LRT')
 find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
                                de_method = 'edgeR',
-                               de_type = 'LRT'){
+                               de_type = 'LRT',
+                               ident.1 = NULL,
+                               ident.2 = NULL){
         if (n_distinct(targets$group) != 2) return(NULL)
         # create design
         design = model.matrix(~ group, data = targets)
-        groups <- switch(class(targets$group),
-                         factor = levels(targets$group),
-                         unique(targets$group))
         DE <- switch(de_method,
                     edgeR = {
                             tryCatch({
@@ -397,7 +421,7 @@ find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
                                             as.data.frame() %>%
                                             rownames_to_column('gene') %>%
                                             # flag metrics in results
-                                            mutate(cluster = paste(groups[1],"vs",groups[2]),
+                                            mutate(cluster = paste(ident.1,"vs",ident.2),
                                                    de_method = paste0('pseudobulk ',de_method,"-",de_type))
                             }, error = function(e) {
                                     message(e)
@@ -431,7 +455,7 @@ find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
                                     res = as.data.frame(res) %>%
                                             mutate(gene = rownames(x)) %>%
                                             # flag metrics in results
-                                            mutate(cluster = paste(levels(meta$label)[1],"vs",levels(meta$label)[2]),
+                                            mutate(cluster = paste(ident.1,"vs",ident.2),
                                                    de_method = paste0('pseudobulk ',de_method,"-",de_type))
                             }, error = function(e) {
                                     message(e)
@@ -466,7 +490,7 @@ find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
                                             topTable(number = Inf, coef = -1) %>%
                                             tibble::rownames_to_column('gene') %>%
                                             # flag metrics in results
-                                            mutate(cluster = paste(levels(meta$label)[1],"vs",levels(meta$label)[2]),
+                                            mutate(cluster = paste(ident.1,"vs",ident.2),
                                                    de_method = paste0('pseudobulk ',de_method,"-",de_type))
                             }, error = function(e) {
                                     message(e)
@@ -487,6 +511,8 @@ find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
 #'   Defaults to edgeR.
 #' @param de_type the specific parameter of the differential expression testing
 #'   method. Defaults to LRT for edgeR, LRT for DESeq2, and trend for limma.
+#' @param ident.1 Identity class to define markers for; if NULL, use all groups for comparison
+#' @param ident.2 A second identity class for comparison; if NULL, use all other cells for comparison
 #' @return a data frame containing differential expression results.
 #'  
 #' @importFrom magrittr %<>%
@@ -503,23 +529,34 @@ find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
 
 find_all_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
                                de_method = 'edgeR',
-                               de_type = 'LRT'){
+                               de_type = 'LRT', ident.1 = NULL, ident.2 = NULL){
         if (n_distinct(targets$group) < 2) return(NULL)
         
         groups <- switch(class(targets$group),
                          factor = levels(targets$group),
                          unique(targets$group))
         
-        DE <- pbapply::pblapply(groups, function(group) {
+        if(!is.null(ident.1)) ident.1.grps <- groups[groups %in% ident.1]
+        DE <- pbapply::pblapply(ident.1.grps, function(grp) {
                 targets0 <- targets
-                rest_groups <- paste(groups[!groups %in% group],collapse = "|")
-                targets0$group %<>% gsub(rest_groups, "others", .)
-                find_pseudobulk_de(x,targets0,de_family = ,de_family,de_method = de_method,de_type =  de_type)
+                if(is.null(ident.2)) {
+                        rest_groups <- paste(groups[!groups %in% grp],collapse = "|")
+                        targets0$group %<>% gsub(rest_groups, "rest", .)
+                        ident.2 <- "rest"
+                } else {
+                        if(grp == ident.2) return(NULL)
+                        targets0 %<>% filter(group %in% c(grp,ident.2))
+                }
+                targets0$group %<>% factor(levels = c(grp,ident.2))
+                find_pseudobulk_de(x[,targets0$group],targets0,de_family = ,de_family,de_method = de_method,
+                                   de_type =  de_type,ident.1 = grp, ident.2 = ident.2)
                 
         })
-        names(DE) <- groups
+        names(DE) <- ident.1.grps
         
-        DE %<>% bind_rows(.id = "cluster")
+        if(is.null(ident.2)) {
+                DE %<>% bind_rows(.id = "cluster")
+        } else DE %<>% bind_rows
         return(DE)
         
 }
@@ -595,14 +632,13 @@ to_pseudobulk.1 = function(input,
             unique()
     meta %<>% filter(cell_type_label %in%  keep_meta)
     # keep only cell types with enough cells
-    keep <- meta %>%
-        dplyr::count(cell_type, label) %>%
-        group_by(cell_type) %>%
-        filter(all(n >= min_cells)) %>% 
-        pull(cell_type) %>%
-        unique()
+    keep = meta %>%
+            dplyr::count(cell_type, label) %>%
+            group_by(cell_type) %>%
+            filter(all(n >= min_cells)) %>%
+            pull(cell_type) %>%
+            unique()
     
-
     # process data into gene x replicate x cell_type matrices
     pseudobulks = keep %>%
             purrr::map( ~ {
@@ -624,7 +660,8 @@ to_pseudobulk.1 = function(input,
             keep_genes = Matrix::rowSums(mat_mm > 0) >= min_features
             mat_mm = mat_mm[keep_genes, ] %>% as.data.frame()
             mat_mm %<>% as.data.frame()
-            colnames(mat_mm) = gsub("replicate|label", "", colnames(mat_mm))
+            colnames(mat_mm) %<>% gsub("^replicate", "", .) %>%
+                                  gsub(":label", ":", .)
             # drop empty columns
             keep_samples = colSums(mat_mm) > 0
             mat_mm %<>% magrittr::extract(, keep_samples)
