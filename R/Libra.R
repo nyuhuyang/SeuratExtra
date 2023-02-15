@@ -19,7 +19,6 @@ library(stats)
 library(tester)
 library(tibble)
 library(Libra)
-
 #' Add loop for comparison when more than 2 groups differenial analysis.
 #' @examples 
 #' data("hagai_toy")
@@ -158,8 +157,9 @@ library(Libra)
 #' @examples data("hagai_toy")
 #' hagai_toy@meta.data[hagai_toy$label == "unst" & hagai_toy$replicate == "mouse1","label"] <- "new_condition"
 #' DE <- run_de.1(hagai_toy,min_reps = 1)
-#' DE <- run_de.1(hagai_toy,min_reps = 1, ident.2 = "new_condition")
+#' DE <- run_de.1(hagai_toy,min_reps = 1, ident.2 = "unst")
 #' DE <- run_de.1(hagai_toy,min_reps = 1, ident.1 = "lps4")
+#' DE <- run_de.1(hagai_toy,min_reps = 1, ident.2 = "new_condition")
 run_de.1 = function(input,
                   meta = NULL,
                   replicate_col = 'replicate',
@@ -244,13 +244,13 @@ run_de.1 = function(input,
         as.character()
     
     DE %<>%
-        # calculate adjusted p values
-        group_by(cell_type) %>%
-        mutate(p_val_adj = p.adjust(p_val, method = 'BH')) %>%
-        # make sure gene is a character not a factor
-        mutate(gene = as.character(gene)) %>%
+            # calculate adjusted p values
+            group_by(cell_type) %>%
+            mutate(p_val_adj = p.adjust(p_val, method = 'BH')) %>%
+            # make sure gene is a character not a factor
+            mutate(gene = as.character(gene)) %>%
         # invert logFC to match Seurat level coding
-        mutate(avg_logFC = avg_logFC * -1) %>%
+        #mutate(avg_logFC = avg_logFC * -1) %>%
         dplyr::select(gene,
                       avg_logFC,
                       p_val,
@@ -261,7 +261,8 @@ run_de.1 = function(input,
                       cell_type,
                       de_method
         ) %>%
-        group_by(cluster) %>%
+        ungroup() %>%
+        group_by(cell_type,cluster) %>%
         arrange(desc(avg_logFC), .by_group = TRUE) %>%
         ungroup()
         
@@ -404,6 +405,7 @@ find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
         if (n_distinct(targets$group) != 2) return(NULL)
         # create design
         design = model.matrix(~ group, data = targets)
+        
         DE <- switch(de_method,
                     edgeR = {
                             tryCatch({
@@ -423,9 +425,7 @@ find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
                                             as.data.frame() %>%
                                             rownames_to_column('gene') %>%
                                             # flag metrics in results
-                                            mutate(log2UMI.1 = log2(rowSums(x[,targets$group == ident.1])),
-                                                   log2UMI.2 = log2(rowSums(x[,targets$group == ident.2])),
-                                                   cluster = paste(ident.1,"vs",ident.2),
+                                            mutate(cluster = paste(ident.1,"vs",ident.2),
                                                    de_method = paste0('pseudobulk ',de_method,"-",de_type))
                             }, error = function(e) {
                                     message(e)
@@ -459,9 +459,7 @@ find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
                                     res = as.data.frame(res) %>%
                                             mutate(gene = rownames(x)) %>%
                                             # flag metrics in results
-                                            mutate(log2UMI.1 = log2(rowSums(x[,targets$group == ident.1])),
-                                                   log2UMI.2 = log2(rowSums(x[,targets$group == ident.2])),
-                                                   cluster = paste(ident.1,"vs",ident.2),
+                                            mutate(cluster = paste(ident.1,"vs",ident.2),
                                                    de_method = paste0('pseudobulk ',de_method,"-",de_type))
                             }, error = function(e) {
                                     message(e)
@@ -496,9 +494,7 @@ find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
                                             topTable(number = Inf, coef = -1) %>%
                                             tibble::rownames_to_column('gene') %>%
                                             # flag metrics in results
-                                            mutate(log2UMI.1 = log2(rowSums(x[,targets$group == ident.1])),
-                                                   log2UMI.2 = log2(rowSums(x[,targets$group == ident.2])),
-                                                   cluster = paste(ident.1,"vs",ident.2),
+                                            mutate(cluster = paste(ident.1,"vs",ident.2),
                                                    de_method = paste0('pseudobulk ',de_method,"-",de_type))
                             }, error = function(e) {
                                     message(e)
@@ -506,6 +502,12 @@ find_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
                             })
                     }
         )
+        rowMeans_mean <- function(mtx){
+                if(is.vector(mtx)) return(mtx)
+                if(is.data.frame(mtx)) return(rowMeans(mtx))
+        }
+        DE %<>% mutate(log2UMI.1 = log2(rowMeans_mean(x[DE$gene,targets$group == ident.1])+1),
+                        log2UMI.2 = log2(rowMeans_mean(x[DE$gene,targets$group == ident.2])+1))
         return(DE)
 }
 
@@ -544,7 +546,9 @@ find_all_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
                          factor = levels(targets$group),
                          unique(targets$group))
         
-        if(!is.null(ident.1)) ident.1.grps <- groups[groups %in% ident.1]
+        if(!is.null(ident.1)) {
+                ident.1.grps <- groups[groups %in% ident.1]
+                } else ident.1.grps <- groups
         DE <- pbapply::pblapply(ident.1.grps, function(grp) {
                 targets0 <- targets
                 if(is.null(ident.2)) {
@@ -555,8 +559,8 @@ find_all_pseudobulk_de <- function(x, targets, de_family = 'pseudobulk',
                         if(grp == ident.2) return(NULL)
                         targets0 %<>% filter(group %in% c(grp,ident.2))
                 }
-                targets0$group %<>% factor(levels = c(grp,ident.2))
-                find_pseudobulk_de(x[,targets0$group],targets0,de_family = ,de_family,de_method = de_method,
+                targets0$group %<>% factor(levels = c(ident.2,grp))
+                find_pseudobulk_de(x[,targets0$group_sample],targets0,de_family = ,de_family,de_method = de_method,
                                    de_type =  de_type,ident.1 = grp, ident.2 = ident.2)
                 
         })
